@@ -24,9 +24,11 @@ import { MetricCards } from "../components/MetricCards";
 import { ControlTopesTab } from "../components/tabs/ControlTopesTab";
 import { ResumenEsfmTab } from "../components/tabs/ResumenEsfmTab";
 import { EstadisticasTab } from "../components/tabs/EstadisticasTab";
+import { InamovilidadesModificacionesTab } from "../components/tabs/InamovilidadesModificacionesTab";
 import {
   FolderUp,
   FileSpreadsheet,
+  FileText,
   CheckCircle2,
   Zap,
   Filter,
@@ -44,7 +46,7 @@ export default function Home() {
   const [resumen, setResumen] = useState<FilaResumen[]>([]);
   const [controlTopes, setControlTopes] = useState<FilaControlTope[]>([]);
 
-  const [activeTab, setActiveTab] = useState<"topes" | "resumen" | "stats">("topes");
+  const [activeTab, setActiveTab] = useState<"topes" | "resumen" | "stats" | "informe">("topes");
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -434,6 +436,14 @@ export default function Home() {
             <BarChart3 size={17} />
             📈 Tablero Estadístico Nacional
           </button>
+
+          <button
+            onClick={() => setActiveTab("informe")}
+            className={`tab-button ${activeTab === "informe" ? "active" : ""}`}
+          >
+            <FileText size={17} />
+            📑 Inamovilidades y Modificaciones
+          </button>
         </nav>
 
         {/* Vista Activa */}
@@ -458,6 +468,14 @@ export default function Home() {
             <EstadisticasTab
               tabla={tabla}
               resumen={resumen}
+            />
+          )}
+
+          {activeTab === "informe" && (
+            <InamovilidadesModificacionesTab
+              convocatoriaRecords={dfs.publicacion_convocatoria || []}
+              filtroDepto={filtroDepto}
+              filtroEsfm={filtroEsfm}
             />
           )}
         </div>
