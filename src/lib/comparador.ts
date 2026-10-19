@@ -25,6 +25,10 @@ export function calcularItemsFila(
 ): number {
   const detalle = (row.detalle || "").trim().toUpperCase();
   const esInamovilidad = detalle.includes("INAMOBILIDAD");
+  const esDocente =
+    row.categoria === "DOCENTE" ||
+    (row.cargo_raw || "").toUpperCase().includes("CATEDRATICO") ||
+    (row.cargo_raw || "").toUpperCase().includes("DOCENTE");
 
   // Base de ítems según columnas seleccionadas
   let total = 0;
@@ -36,17 +40,14 @@ export function calcularItemsFila(
     // Oficial = filas con detalle vacío (sin modificaciones ni inamovilidades)
     if (detalle !== "") return 0;
   } else if (config.modoDetalle === "SIN_INAMOVILIDAD") {
-    // Inamovilidad: la plaza protegida ocupa -1 ítem de la fila
-    // Ej: fila con 3Años=2 e INAMOBILIDAD → queda 2-1=1 (no se elimina la fila)
-    if (esInamovilidad) return Math.max(0, total - 1);
+    // Inamovilidad: solo se descuenta -1 en filas de docentes con inamovilidad (20 en total)
+    if (esInamovilidad && esDocente) return Math.max(0, total - 1);
   } else if (config.modoDetalle === "SOLO_INAMOVILIDAD") {
-    // Cada fila de inamovilidad = 1 plaza protegida (independiente de los años)
-    // Resultado: total = 20 docentes (una plaza por fila con INAMOBILIDAD)
-    if (!esInamovilidad) return 0;
+    // Cada docente con inamovilidad = 1 plaza protegida (total = 20)
+    if (!esInamovilidad || !esDocente) return 0;
     return 1;
   } else if (config.modoDetalle === "SOLO_COMPULSA") {
-    // Compulsa = suma directa columna 1 año de TODAS las filas (incluye las de INAMOBILIDAD con anios_1)
-    // No filtrar por detalle: si tiene anios_1 > 0 cuenta. Total esperado = 133
+    // Compulsa = suma directa columna 1 año de TODAS las filas
     return row.anios_1 ?? 0;
   } else if (config.modoDetalle === "SOLO_MODIFICACIONES") {
     if (!detalle.includes("QUITO") && !detalle.includes("INCREMENT")) return 0;
@@ -350,7 +351,11 @@ export function resumenPorEsfm(
     const a2 = r.anios_2 ?? 0;
     const a1 = r.anios_1 ?? 0;
     const itemsCalc = calcularItemsFila(r, config);
-    const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") ? (a3 + a2 + a1) : 0;
+    const esDoc =
+      r.categoria === "DOCENTE" ||
+      (r.cargo_raw || "").toUpperCase().includes("CATEDRATICO") ||
+      (r.cargo_raw || "").toUpperCase().includes("DOCENTE");
+    const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") && esDoc ? 1 : 0;
 
     if (!existing) {
       map.set(key, {
