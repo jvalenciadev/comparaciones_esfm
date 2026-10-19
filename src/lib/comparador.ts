@@ -441,7 +441,7 @@ export function calcularControlTopes(
     const a3 = r.anios_3 ?? 0;
     const a2 = r.anios_2 ?? 0;
     const a1 = r.anios_1 ?? 0;
-    const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") ? (a3 + a2 + a1) : 0;
+    const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") ? 1 : 0;
 
     if (!item) {
       convMap.set(key, {

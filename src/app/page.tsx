@@ -274,7 +274,6 @@ export default function Home() {
               style={{ fontSize: "0.78rem", padding: "6px 8px" }}
             >
               <option value="TODOS">Todos (Convocatoria Completa)</option>
-              <option value="SOLO_OFICIAL">🔵 Solo Oficial (Sin Detalle / Vacío)</option>
               <option value="SIN_INAMOVILIDAD">🟢 Sin Inamovilidad (Descontada)</option>
               <option value="SOLO_INAMOVILIDAD">🟡 Solo Inamovilidad</option>
               <option value="SOLO_COMPULSA">🟣 Solo Compulsa (1 Año / Reposición)</option>
