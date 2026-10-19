@@ -19,9 +19,7 @@ import {
 } from "../lib/comparador";
 import { MetricCards } from "../components/MetricCards";
 import { ControlTopesTab } from "../components/tabs/ControlTopesTab";
-import { TablaComparativaTab } from "../components/tabs/TablaComparativaTab";
 import { ResumenEsfmTab } from "../components/tabs/ResumenEsfmTab";
-import { DiscrepanciasTab } from "../components/tabs/DiscrepanciasTab";
 import { EstadisticasTab } from "../components/tabs/EstadisticasTab";
 import {
   FolderUp,
@@ -31,11 +29,10 @@ import {
   Zap,
   Filter,
   BarChart3,
-  Layers,
   Building2,
   Target,
-  SearchCode,
   Globe,
+  Layers,
 } from "lucide-react";
 
 export default function Home() {
@@ -44,15 +41,13 @@ export default function Home() {
   const [resumen, setResumen] = useState<FilaResumen[]>([]);
   const [controlTopes, setControlTopes] = useState<FilaControlTope[]>([]);
 
-  const [activeTab, setActiveTab] = useState<"topes" | "tabla" | "resumen" | "discrepancias" | "stats">("topes");
+  const [activeTab, setActiveTab] = useState<"topes" | "resumen" | "stats">("topes");
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Filtros
   const [filtroDepto, setFiltroDepto] = useState<string>("");
   const [filtroEsfm, setFiltroEsfm] = useState<string>("");
-  const [filtroCat, setFiltroCat] = useState<string>("");
-  const [soloDiscrepancias, setSoloDiscrepancias] = useState(false);
 
   // Listas de opciones para filtros
   const opcionesDepto = React.useMemo(() => {
@@ -63,10 +58,6 @@ export default function Home() {
     const list = filtroDepto ? tabla.filter((r) => r.departamento === filtroDepto) : tabla;
     return Array.from(new Set(list.map((r) => r.esfm_display).filter(Boolean))).sort();
   }, [tabla, filtroDepto]);
-
-  const opcionesCat = React.useMemo(() => {
-    return Array.from(new Set(tabla.map((r) => r.categoria).filter(Boolean))).sort();
-  }, [tabla]);
 
   // Función para procesar y actualizar estado centralizado
   const procesarDatasets = (sources: DataSources) => {
@@ -272,30 +263,6 @@ export default function Home() {
               ))}
             </select>
           </div>
-
-          <div className="form-group">
-            <label className="form-label">Categoría</label>
-            <select
-              value={filtroCat}
-              onChange={(e) => setFiltroCat(e.target.value)}
-              className="form-select"
-            >
-              <option value="">Todas las Categorías</option>
-              {opcionesCat.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-
-          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.8rem", color: "#e2e8f0", marginTop: "4px" }}>
-            <input
-              type="checkbox"
-              checked={soloDiscrepancias}
-              onChange={(e) => setSoloDiscrepancias(e.target.checked)}
-              style={{ accentColor: "var(--accent-blue)", cursor: "pointer" }}
-            />
-            Mostrar solo discrepancias
-          </label>
         </div>
 
         {/* Footer info */}
@@ -352,27 +319,11 @@ export default function Home() {
           </button>
 
           <button
-            onClick={() => setActiveTab("tabla")}
-            className={`tab-button ${activeTab === "tabla" ? "active" : ""}`}
-          >
-            <Layers size={17} />
-            📊 Tabla Comparativa Centralizada
-          </button>
-
-          <button
             onClick={() => setActiveTab("resumen")}
             className={`tab-button ${activeTab === "resumen" ? "active" : ""}`}
           >
             <Building2 size={17} />
             🏛️ Resumen por ESFM / UA
-          </button>
-
-          <button
-            onClick={() => setActiveTab("discrepancias")}
-            className={`tab-button ${activeTab === "discrepancias" ? "active" : ""}`}
-          >
-            <SearchCode size={17} />
-            🔍 Análisis y Discrepancias
           </button>
 
           <button
@@ -394,28 +345,9 @@ export default function Home() {
             />
           )}
 
-          {activeTab === "tabla" && (
-            <TablaComparativaTab
-              tabla={tabla}
-              resumen={resumen}
-              filtroDepto={filtroDepto}
-              filtroEsfm={filtroEsfm}
-              filtroCat={filtroCat}
-              soloDiscrepancias={soloDiscrepancias}
-            />
-          )}
-
           {activeTab === "resumen" && (
             <ResumenEsfmTab
               resumen={resumen}
-              filtroDepto={filtroDepto}
-              filtroEsfm={filtroEsfm}
-            />
-          )}
-
-          {activeTab === "discrepancias" && (
-            <DiscrepanciasTab
-              tabla={tabla}
               filtroDepto={filtroDepto}
               filtroEsfm={filtroEsfm}
             />
