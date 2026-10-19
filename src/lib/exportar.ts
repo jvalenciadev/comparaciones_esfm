@@ -84,3 +84,30 @@ export function exportarExcelInamovilidadesModificaciones(
   XLSX.writeFile(wb, filename);
 }
 
+export function exportarExcelEstadisticasDepto(
+  datos: Array<{
+    departamento: string;
+    instituciones: number;
+    totalSep: number;
+    total2023: number;
+    totalConv: number;
+    difVsSep: number;
+    difVs2023: number;
+  }>,
+  filename = "tablero_estadistico_departamental_sep_2023_conv.xlsx"
+) {
+  const wb = XLSX.utils.book_new();
+  const data = datos.map((d) => ({
+    Departamento: d.departamento,
+    "Nro Instituciones (ESFM/UA)": d.instituciones,
+    "Planilla SEP (Tope Presupuestario)": d.totalSep,
+    "Gestión 2023 (Línea Base)": d.total2023,
+    "Convocatoria Oficial": d.totalConv,
+    "Diferencia vs SEP (Conv - SEP)": d.difVsSep,
+    "Diferencia vs 2023 (Conv - 2023)": d.difVs2023,
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, "Estadisticas_Departamentales");
+  XLSX.writeFile(wb, filename);
+}
+

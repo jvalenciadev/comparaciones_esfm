@@ -488,6 +488,8 @@ export default function Home() {
             <EstadisticasTab
               tabla={tabla}
               resumen={resumen}
+              controlTopes={controlTopes}
+              categoriaPersonal={configConvocatoria.categoriaPersonal}
             />
           )}
 
