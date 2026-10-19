@@ -9,7 +9,7 @@ interface Props {
   controlTopes: FilaControlTope[];
   filtroDepto: string;
   filtroEsfm: string;
-  categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "TODOS";
+  categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "SERVICIO" | "TODOS";
 }
 
 export const ControlTopesTab: React.FC<Props> = ({
@@ -23,9 +23,11 @@ export const ControlTopesTab: React.FC<Props> = ({
   const labelCat =
     categoriaPersonal === "ADMINISTRATIVOS"
       ? "Administrativos"
-      : categoriaPersonal === "TODOS"
-      ? "Personal (General)"
-      : "Docentes";
+      : categoriaPersonal === "SERVICIO"
+        ? "Servicio (Chofer / Portero)"
+        : categoriaPersonal === "TODOS"
+          ? "Personal (General)"
+          : "Docentes";
 
   const filtrados = useMemo(() => {
     return controlTopes.filter((r) => {
@@ -207,8 +209,8 @@ export const ControlTopesTab: React.FC<Props> = ({
                       row.estado.includes("EXCEDE")
                         ? "badge-red"
                         : row.estado.includes("FALTAN")
-                        ? "badge-yellow"
-                        : "badge-green"
+                          ? "badge-yellow"
+                          : "badge-green"
                     }>
                       {row.estado}
                     </span>

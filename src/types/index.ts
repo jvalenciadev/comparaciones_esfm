@@ -20,7 +20,7 @@ export interface ConfiguracionConvocatoria {
   incluir3Anios: boolean;
   incluir2Anios: boolean;
   incluir1Anio: boolean;
-  categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "TODOS";
+  categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "SERVICIO" | "TODOS";
   modoDetalle:
   | "TODOS"
   | "SOLO_OFICIAL"

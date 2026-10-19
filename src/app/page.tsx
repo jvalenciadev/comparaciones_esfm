@@ -236,8 +236,9 @@ export default function Home() {
               style={{ fontSize: "0.78rem", padding: "6px 8px" }}
             >
               <option value="DOCENTES">🎓 Solo Docentes (Catedráticos)</option>
-              <option value="ADMINISTRATIVOS">💼 Solo Administrativos / Directivos</option>
-              <option value="TODOS">🌐 General (Docentes + Adm.)</option>
+              <option value="ADMINISTRATIVOS">💼 Solo Administrativos / Directivos (Sin Servicio)</option>
+              <option value="SERVICIO">🧹 Solo Servicio (Chofer / Portero)</option>
+              <option value="TODOS">🌐 General (Docentes + Adm. + Servicio)</option>
             </select>
           </div>
 

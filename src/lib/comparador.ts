@@ -24,21 +24,48 @@ export function esRegistroDocente(row: BaseRecord): boolean {
   if (row.categoria === "DOCENTE") return true;
   const c = (row.cargo_raw || "").toUpperCase();
   const ck = (row.cargo_key || "").toUpperCase();
+  const d = (row.descripcion || "").toUpperCase();
+  const dk = (row.desc_key || "").toUpperCase();
   return (
     c.includes("CATEDRATICO") ||
     c.includes("DOCENTE") ||
     ck.includes("CATEDRATICO") ||
-    ck.includes("DOCENTE")
+    ck.includes("DOCENTE") ||
+    d.includes("CATEDRATICO") ||
+    dk.includes("CATEDRATICO")
   );
+}
+
+export function esRegistroServicio(row: BaseRecord): boolean {
+  const c = (row.cargo_raw || "").toUpperCase();
+  const ck = (row.cargo_key || "").toUpperCase();
+  const d = (row.descripcion || "").toUpperCase();
+  const dk = (row.desc_key || "").toUpperCase();
+  return (
+    c.includes("CHOFER") ||
+    c.includes("PORTERO") ||
+    ck.includes("CHOFER") ||
+    ck.includes("PORTERO") ||
+    d.includes("CHOFER") ||
+    d.includes("PORTERO") ||
+    dk.includes("CHOFER") ||
+    dk.includes("PORTERO")
+  );
+}
+
+export function esRegistroAdministrativo(row: BaseRecord): boolean {
+  return !esRegistroDocente(row) && !esRegistroServicio(row);
 }
 
 export function cumpleCategoriaPersonal(
   row: BaseRecord,
-  cat?: "DOCENTES" | "ADMINISTRATIVOS" | "TODOS"
+  cat?: "DOCENTES" | "ADMINISTRATIVOS" | "SERVICIO" | "TODOS"
 ): boolean {
   if (!cat || cat === "TODOS") return true;
-  const isDoc = esRegistroDocente(row);
-  return cat === "DOCENTES" ? isDoc : !isDoc;
+  if (cat === "DOCENTES") return esRegistroDocente(row);
+  if (cat === "SERVICIO") return esRegistroServicio(row);
+  if (cat === "ADMINISTRATIVOS") return esRegistroAdministrativo(row);
+  return true;
 }
 
 export function calcularItemsFila(
@@ -154,8 +181,19 @@ export function construirTablaComparativa(
   let universo = Array.from(mapUniverso.values());
   if (config.categoriaPersonal === "DOCENTES") {
     universo = universo.filter((r) => r.categoria === "DOCENTE");
+  } else if (config.categoriaPersonal === "SERVICIO") {
+    universo = universo.filter((r) => {
+      const c = (r.cargo_display || "").toUpperCase();
+      const d = (r.descripcion_cargo || "").toUpperCase();
+      return c.includes("CHOFER") || c.includes("PORTERO") || d.includes("CHOFER") || d.includes("PORTERO");
+    });
   } else if (config.categoriaPersonal === "ADMINISTRATIVOS") {
-    universo = universo.filter((r) => r.categoria !== "DOCENTE");
+    universo = universo.filter((r) => {
+      if (r.categoria === "DOCENTE") return false;
+      const c = (r.cargo_display || "").toUpperCase();
+      const d = (r.descripcion_cargo || "").toUpperCase();
+      return !c.includes("CHOFER") && !c.includes("PORTERO") && !d.includes("CHOFER") && !d.includes("PORTERO");
+    });
   }
 
   const deptoMapByEsfm: Record<string, Set<string>> = {};
