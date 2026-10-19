@@ -2,6 +2,7 @@
 
 import React, { useMemo } from "react";
 import { FilaComparativa, FilaResumen } from "../../types";
+import { BarChart3, GraduationCap, Briefcase } from "lucide-react";
 
 interface Props {
   tabla: FilaComparativa[];
@@ -54,8 +55,9 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       <div>
-        <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff" }}>
-          📈 Tablero Estadístico Nacional
+        <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "10px" }}>
+          <BarChart3 size={20} color="var(--accent-blue)" />
+          Tablero Estadístico Nacional
         </h3>
         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
           Distribución de plazas por Departamento y desagregación por categoría ocupacional según filtros activos.
@@ -112,8 +114,9 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
       {/* Tarjetas comparativas Docentes vs Administrativos */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "16px" }}>
         <div className="glass-panel" style={{ padding: "20px" }}>
-          <h4 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#60a5fa", marginBottom: "8px" }}>
-            🎓 Plazas Docentes (Catedráticos)
+          <h4 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#60a5fa", marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <GraduationCap size={16} />
+            Plazas Docentes (Catedráticos)
           </h4>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "12px", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
             <span style={{ color: "var(--text-muted)" }}>Gestión 2023:</span>
@@ -132,8 +135,9 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
         </div>
 
         <div className="glass-panel" style={{ padding: "20px" }}>
-          <h4 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f59e0b", marginBottom: "8px" }}>
-            💼 Plazas Administrativas / Directivas
+          <h4 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f59e0b", marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <Briefcase size={16} />
+            Plazas Administrativas / Directivas
           </h4>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "12px", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
             <span style={{ color: "var(--text-muted)" }}>Gestión 2023:</span>

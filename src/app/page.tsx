@@ -235,10 +235,10 @@ export default function Home() {
               className="form-select"
               style={{ fontSize: "0.78rem", padding: "6px 8px" }}
             >
-              <option value="DOCENTES">🎓 Solo Docentes (Catedráticos)</option>
-              <option value="ADMINISTRATIVOS">💼 Solo Administrativos / Directivos (Sin Servicio)</option>
-              <option value="SERVICIO">🧹 Solo Servicio (Chofer / Portero)</option>
-              <option value="TODOS">🌐 General (Docentes + Adm. + Servicio)</option>
+              <option value="DOCENTES">Solo Docentes (Catedráticos)</option>
+              <option value="ADMINISTRATIVOS">Solo Administrativos / Directivos (Sin Servicio)</option>
+              <option value="SERVICIO">Solo Servicio (Chofer / Portero)</option>
+              <option value="TODOS">General (Docentes + Adm. + Servicio)</option>
             </select>
           </div>
 
@@ -294,10 +294,10 @@ export default function Home() {
               style={{ fontSize: "0.78rem", padding: "6px 8px" }}
             >
               <option value="TODOS">Todos (Convocatoria Completa)</option>
-              <option value="SIN_INAMOVILIDAD">🟢 Sin Inamovilidad (Descontada)</option>
-              <option value="SOLO_INAMOVILIDAD">🟡 Solo Inamovilidad</option>
-              <option value="SOLO_COMPULSA">🟣 Solo Compulsa (1 Año / Reposición)</option>
-              <option value="SOLO_MODIFICACIONES">🔴 Solo Modificaciones (Quitas/Incrementos)</option>
+              <option value="SIN_INAMOVILIDAD">Sin Inamovilidad (Descontada)</option>
+              <option value="SOLO_INAMOVILIDAD">Solo Inamovilidad</option>
+              <option value="SOLO_COMPULSA">Solo Compulsa (1 Año / Reposición)</option>
+              <option value="SOLO_MODIFICACIONES">Solo Modificaciones (Quitas / Incrementos)</option>
             </select>
           </div>
         </div>
@@ -437,7 +437,7 @@ export default function Home() {
             className={`tab-button ${activeTab === "topes" ? "active" : ""}`}
           >
             <Target size={17} />
-            🎯 Control de Topes (SEP vs Convocatoria Oficial)
+            Control de Topes (SEP vs Convocatoria Oficial)
           </button>
 
           <button
@@ -445,7 +445,7 @@ export default function Home() {
             className={`tab-button ${activeTab === "resumen" ? "active" : ""}`}
           >
             <Building2 size={17} />
-            🏛️ Resumen por ESFM / UA
+            Resumen por ESFM / UA
           </button>
 
           <button
@@ -453,7 +453,7 @@ export default function Home() {
             className={`tab-button ${activeTab === "stats" ? "active" : ""}`}
           >
             <BarChart3 size={17} />
-            📈 Tablero Estadístico Nacional
+            Tablero Estadístico Nacional
           </button>
 
           <button
@@ -461,7 +461,7 @@ export default function Home() {
             className={`tab-button ${activeTab === "informe" ? "active" : ""}`}
           >
             <FileText size={17} />
-            📑 Inamovilidades y Modificaciones
+            Inamovilidades y Modificaciones
           </button>
         </nav>
 

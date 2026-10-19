@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { FilaResumen } from "../../types";
 import { exportarExcelResumen } from "../../lib/exportar";
-import { Download } from "lucide-react";
+import { Download, Building2 } from "lucide-react";
 
 interface Props {
   resumen: FilaResumen[];
@@ -36,8 +36,9 @@ export const ResumenEsfmTab: React.FC<Props> = ({
     <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff" }}>
-            🏛️ Consolidado Cuantitativo por Institución
+          <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "10px" }}>
+            <Building2 size={20} color="var(--accent-blue)" />
+            Consolidado Institucional por ESFM / UA
           </h3>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
             Comparativa total de plazas entre la Gestión 2023 y la Publicación de Convocatoria (desglosado en 3 años, 2 años, 1 año compulsa e inamovilidades).

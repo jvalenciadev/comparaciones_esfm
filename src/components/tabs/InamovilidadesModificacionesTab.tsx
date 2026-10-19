@@ -11,6 +11,9 @@ import {
   MinusCircle,
   FileText,
   AlertCircle,
+  GraduationCap,
+  Briefcase,
+  Layers,
 } from "lucide-react";
 
 interface Props {
@@ -140,8 +143,9 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
       {/* Encabezado del Tablero */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "8px" }}>
-            📑 Informe Detallado de Inamovilidades y Modificaciones
+          <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "10px" }}>
+            <FileText size={20} color="var(--accent-blue)" />
+            Informe Detallado de Inamovilidades y Modificaciones
           </h3>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
             Registro pormenorizado con la justificación oficial de plazas con inamovilidad, incrementos, quitas de PCD y designaciones por compulsa.
@@ -172,9 +176,11 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             {totalInamovilidad} <span style={{ fontSize: "0.9rem", color: "#fbbf24" }}>filas totales</span>
           </div>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
-            <span className="badge badge-yellow">🎓 Docente: {totalInamovilidadDocente}</span>
-            <span className="badge" style={{ background: "rgba(245,158,11,0.15)", color: "#d97706", border: "1px solid rgba(245,158,11,0.3)" }}>
-              🏢 Adm: {totalInamovilidadAdm}
+            <span className="badge badge-yellow" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              <GraduationCap size={12} /> Docente: {totalInamovilidadDocente}
+            </span>
+            <span className="badge" style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "rgba(245,158,11,0.15)", color: "#d97706", border: "1px solid rgba(245,158,11,0.3)" }}>
+              <Briefcase size={12} /> Adm: {totalInamovilidadAdm}
             </span>
           </div>
           <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "6px" }}>
@@ -224,7 +230,7 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
           </div>
           <span className="badge badge-blue">{itemsCompulsa} ítems totales col. 1Año</span>
           <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "4px" }}>
-            Docente/Catálog: <strong style={{ color: "#93c5fd" }}>{totalCompulsaDocente} filas</strong>
+            Docente: <strong style={{ color: "#93c5fd" }}>{totalCompulsaDocente} filas</strong>
             {" / "}<strong style={{ color: "#bfdbfe" }}>{itemsCompulsaDocente} ítems</strong>
           </div>
         </div>
@@ -236,37 +242,67 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
           <button
             onClick={() => setTipoFiltro("TODOS")}
             className={`btn-secondary ${tipoFiltro === "TODOS" ? "active" : ""}`}
-            style={tipoFiltro === "TODOS" ? { borderColor: "var(--accent-blue)", background: "rgba(59, 130, 246, 0.2)" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(tipoFiltro === "TODOS" ? { borderColor: "var(--accent-blue)", background: "rgba(59, 130, 246, 0.2)" } : {})
+            }}
           >
+            <Layers size={14} />
             Todos ({filasClasificadas.length})
           </button>
           <button
             onClick={() => setTipoFiltro("INAMOBILIDAD")}
             className="btn-secondary"
-            style={tipoFiltro === "INAMOBILIDAD" ? { borderColor: "var(--accent-amber)", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(tipoFiltro === "INAMOBILIDAD" ? { borderColor: "var(--accent-amber)", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" } : {})
+            }}
           >
-            🛡️ Inamovilidad ({totalInamovilidad})
+            <ShieldAlert size={14} color="#f59e0b" />
+            Inamovilidad ({totalInamovilidad})
           </button>
           <button
             onClick={() => setTipoFiltro("INCREMENTO")}
             className="btn-secondary"
-            style={tipoFiltro === "INCREMENTO" ? { borderColor: "var(--accent-emerald)", background: "rgba(16, 185, 129, 0.2)", color: "#a7f3d0" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(tipoFiltro === "INCREMENTO" ? { borderColor: "var(--accent-emerald)", background: "rgba(16, 185, 129, 0.2)", color: "#a7f3d0" } : {})
+            }}
           >
-            ➕ Incrementos ({totalIncremento})
+            <PlusCircle size={14} color="#10b981" />
+            Incrementos ({totalIncremento})
           </button>
           <button
             onClick={() => setTipoFiltro("QUITA_PCD")}
             className="btn-secondary"
-            style={tipoFiltro === "QUITA_PCD" ? { borderColor: "var(--accent-rose)", background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(tipoFiltro === "QUITA_PCD" ? { borderColor: "var(--accent-rose)", background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5" } : {})
+            }}
           >
-            ➖ Quitas PCD ({totalQuita})
+            <MinusCircle size={14} color="#ef4444" />
+            Quitas PCD ({totalQuita})
           </button>
           <button
             onClick={() => setTipoFiltro("COMPULSA")}
             className="btn-secondary"
-            style={tipoFiltro === "COMPULSA" ? { borderColor: "var(--accent-blue)", background: "rgba(59, 130, 246, 0.2)", color: "#bfdbfe" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(tipoFiltro === "COMPULSA" ? { borderColor: "var(--accent-blue)", background: "rgba(59, 130, 246, 0.2)", color: "#bfdbfe" } : {})
+            }}
           >
-            📝 Compulsas ({totalCompulsa})
+            <FileText size={14} color="#3b82f6" />
+            Compulsas ({totalCompulsa})
           </button>
         </div>
 

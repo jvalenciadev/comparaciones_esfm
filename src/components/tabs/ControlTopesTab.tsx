@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { FilaControlTope } from "../../types";
 import { exportarExcelTopes } from "../../lib/exportar";
-import { Download, AlertOctagon } from "lucide-react";
+import { Download, AlertOctagon, Target, AlertTriangle, Clock, CheckCircle2, Layers } from "lucide-react";
 
 interface Props {
   controlTopes: FilaControlTope[];
@@ -52,8 +52,9 @@ export const ControlTopesTab: React.FC<Props> = ({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div>
-        <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "8px" }}>
-          🎯 Verificación de Tope de {labelCat} Requeridos (Planilla SEP vs Convocatoria Oficial)
+        <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "10px" }}>
+          <Target size={20} color="var(--accent-blue)" />
+          Control de Topes de {labelCat} (Planilla SEP vs Convocatoria Oficial)
         </h3>
         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
           La Planilla SEP (PLA0926_DGFM estado=1) establece el tope presupuestario asignado. Este módulo compara con la Convocatoria Oficial según la categoría seleccionada ({labelCat.toLowerCase()}) y permite ajustar años (3a, 2a, 1a) e inamovilidades.
@@ -104,7 +105,7 @@ export const ControlTopesTab: React.FC<Props> = ({
           <AlertOctagon size={24} color="#ef4444" style={{ flexShrink: 0, marginTop: "2px" }} />
           <div>
             <h4 style={{ color: "#fca5a5", fontSize: "0.95rem", fontWeight: 700 }}>
-              ALERTA PRESUPUESTARIA: Se detectaron {exceden.length} ESFM/UA convocando MÁS docentes de los permitidos por su tope en Planilla SEP.
+              ALERTA PRESUPUESTARIA: Se detectaron {exceden.length} ESFM/UA convocando MÁS plazas de las permitidas por su tope en Planilla SEP.
             </h4>
             <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
               {exceden.map((e, idx) => (
@@ -123,30 +124,54 @@ export const ControlTopesTab: React.FC<Props> = ({
           <button
             onClick={() => setFiltroEstado("TODOS")}
             className={`btn-secondary ${filtroEstado === "TODOS" ? "active" : ""}`}
-            style={filtroEstado === "TODOS" ? { borderColor: "var(--accent-blue)", background: "rgba(59, 130, 246, 0.2)" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(filtroEstado === "TODOS" ? { borderColor: "var(--accent-blue)", background: "rgba(59, 130, 246, 0.2)" } : {})
+            }}
           >
+            <Layers size={14} />
             Todos ({controlTopes.length})
           </button>
           <button
             onClick={() => setFiltroEstado("EXCEDE")}
             className="btn-secondary"
-            style={filtroEstado === "EXCEDE" ? { borderColor: "var(--accent-rose)", background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(filtroEstado === "EXCEDE" ? { borderColor: "var(--accent-rose)", background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5" } : {})
+            }}
           >
-            🔴 Excede Tope ({controlTopes.filter((r) => r.diferencia > 0).length})
+            <AlertTriangle size={14} color="#ef4444" />
+            Excede Tope ({controlTopes.filter((r) => r.diferencia > 0).length})
           </button>
           <button
             onClick={() => setFiltroEstado("FALTA")}
             className="btn-secondary"
-            style={filtroEstado === "FALTA" ? { borderColor: "var(--accent-amber)", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(filtroEstado === "FALTA" ? { borderColor: "var(--accent-amber)", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" } : {})
+            }}
           >
-            🟡 Faltan por Convocar ({controlTopes.filter((r) => r.diferencia < 0).length})
+            <Clock size={14} color="#f59e0b" />
+            Faltan por Convocar ({controlTopes.filter((r) => r.diferencia < 0).length})
           </button>
           <button
             onClick={() => setFiltroEstado("CUADRE")}
             className="btn-secondary"
-            style={filtroEstado === "CUADRE" ? { borderColor: "var(--accent-emerald)", background: "rgba(16, 185, 129, 0.2)", color: "#a7f3d0" } : {}}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              ...(filtroEstado === "CUADRE" ? { borderColor: "var(--accent-emerald)", background: "rgba(16, 185, 129, 0.2)", color: "#a7f3d0" } : {})
+            }}
           >
-            🟢 Cuadre Exacto ({controlTopes.filter((r) => r.diferencia === 0).length})
+            <CheckCircle2 size={14} color="#10b981" />
+            Cuadre Exacto ({controlTopes.filter((r) => r.diferencia === 0).length})
           </button>
         </div>
 
@@ -205,15 +230,22 @@ export const ControlTopesTab: React.FC<Props> = ({
                     {row.diferencia > 0 ? `+${row.diferencia}` : row.diferencia}
                   </td>
                   <td style={{ textAlign: "center" }}>
-                    <span className={
-                      row.estado.includes("EXCEDE")
-                        ? "badge-red"
-                        : row.estado.includes("FALTAN")
-                          ? "badge-yellow"
-                          : "badge-green"
-                    }>
-                      {row.estado}
-                    </span>
+                    {row.estado.includes("EXCEDE") ? (
+                      <span className="badge-red" style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "4px 8px" }}>
+                        <AlertTriangle size={12} />
+                        Excede ({row.diferencia > 0 ? `+${row.diferencia}` : row.diferencia})
+                      </span>
+                    ) : row.estado.includes("FALTAN") ? (
+                      <span className="badge-yellow" style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "4px 8px" }}>
+                        <Clock size={12} />
+                        Faltan ({row.diferencia})
+                      </span>
+                    ) : (
+                      <span className="badge-green" style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "4px 8px" }}>
+                        <CheckCircle2 size={12} />
+                        Cuadre Exacto
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))
