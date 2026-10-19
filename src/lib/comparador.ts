@@ -24,25 +24,28 @@ export function calcularItemsFila(
   config: ConfiguracionConvocatoria
 ): number {
   const detalle = (row.detalle || "").trim().toUpperCase();
+  const esInamovilidad = detalle.includes("INAMOBILIDAD");
+
+  // Base de ítems según columnas seleccionadas
+  let total = 0;
+  if (config.incluir3Anios) total += row.anios_3 ?? 0;
+  if (config.incluir2Anios) total += row.anios_2 ?? 0;
+  if (config.incluir1Anio) total += row.anios_1 ?? 0;
 
   if (config.modoDetalle === "SOLO_OFICIAL") {
-    // Si queremos sacar oficiales en detalle es nulo o no tiene nada o está vacía escrito: ese es el oficial
+    // Oficial = filas con detalle vacío (sin modificaciones ni inamovilidades)
     if (detalle !== "") return 0;
   } else if (config.modoDetalle === "SIN_INAMOVILIDAD") {
-    // Las inamovilidades se descuentan
-    if (detalle.includes("INAMOBILIDAD")) return 0;
+    // Inamovilidad: la plaza protegida ocupa -1 ítem de la fila
+    // Ej: fila con 3Años=2 e INAMOBILIDAD → queda 2-1=1 (no se elimina la fila)
+    if (esInamovilidad) return Math.max(0, total - 1);
   } else if (config.modoDetalle === "SOLO_INAMOVILIDAD") {
-    if (!detalle.includes("INAMOBILIDAD")) return 0;
+    if (!esInamovilidad) return 0;
   } else if (config.modoDetalle === "SOLO_COMPULSA") {
     if (!detalle.includes("COMPULSA") && (row.anios_1 ?? 0) === 0) return 0;
   } else if (config.modoDetalle === "SOLO_MODIFICACIONES") {
     if (!detalle.includes("QUITO") && !detalle.includes("INCREMENT")) return 0;
   }
-
-  let total = 0;
-  if (config.incluir3Anios) total += row.anios_3 ?? 0;
-  if (config.incluir2Anios) total += row.anios_2 ?? 0;
-  if (config.incluir1Anio) total += row.anios_1 ?? 0;
 
   return total;
 }

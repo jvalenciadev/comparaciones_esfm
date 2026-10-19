@@ -88,6 +88,16 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
   const totalQuita = filasClasificadas.filter((f) => f.tipo === "QUITA_PCD").length;
   const totalCompulsa = filasClasificadas.filter((f) => f.tipo === "COMPULSA").length;
 
+  // Ítems reales (sumando columnas de años) por categoría
+  const itemsInamovilidad = filasClasificadas
+    .filter((f) => f.tipo === "INAMOBILIDAD")
+    .reduce((acc, f) => acc + f.anios3 + f.anios2 + f.anios1, 0);
+  const itemsCompulsa = filasClasificadas
+    .filter((f) => f.tipo === "COMPULSA")
+    .reduce((acc, f) => acc + f.anios1, 0); // Compulsa únicamente cuenta 1 año
+  const itemsSinInamovilidad = itemsInamovilidad - totalInamovilidad; // -1 por cada fila inamovilidad
+
+
   // Filtrado reactivo por chips, departamento, ESFM y búsqueda
   const filtrados = useMemo(() => {
     return filasClasificadas.filter((r) => {
@@ -141,8 +151,11 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             <ShieldAlert size={16} color="#f59e0b" />
             Inamovilidades
           </div>
-          <div className="val" style={{ color: "#fde68a" }}>{totalInamovilidad}</div>
-          <span className="badge badge-yellow">Funcionarios Protegidos</span>
+          <div className="val" style={{ color: "#fde68a" }}>{totalInamovilidad} <span style={{ fontSize: "0.9rem", color: "#fbbf24" }}>filas</span></div>
+          <span className="badge badge-yellow">{itemsInamovilidad} ítems totales</span>
+          <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "4px" }}>
+            Sin Inamovilidad: <strong style={{ color: "#a7f3d0" }}>{itemsInamovilidad - totalInamovilidad}</strong> ítems (−1 por fila)
+          </div>
         </div>
 
         <div
@@ -168,7 +181,7 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             Quitas (Sin PCD)
           </div>
           <div className="val" style={{ color: "#fca5a5" }}>{totalQuita}</div>
-          <span className="badge badge-red">-1 Retirado de Convocatoria</span>
+          <span className="badge badge-red">−1 Retirado de Convocatoria</span>
         </div>
 
         <div
@@ -180,8 +193,8 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             <FileText size={16} color="#3b82f6" />
             Compulsas / 1 Año
           </div>
-          <div className="val" style={{ color: "#bfdbfe" }}>{totalCompulsa}</div>
-          <span className="badge badge-blue">Contratos Temporales</span>
+          <div className="val" style={{ color: "#bfdbfe" }}>{totalCompulsa} <span style={{ fontSize: "0.9rem", color: "#93c5fd" }}>filas</span></div>
+          <span className="badge badge-blue">{itemsCompulsa} ítems (1 Año)</span>
         </div>
       </div>
 
