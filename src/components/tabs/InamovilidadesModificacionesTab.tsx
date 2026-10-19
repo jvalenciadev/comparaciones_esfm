@@ -86,16 +86,25 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
   const totalInamovilidad = filasClasificadas.filter((f) => f.tipo === "INAMOBILIDAD").length;
   const totalIncremento = filasClasificadas.filter((f) => f.tipo === "INCREMENTO").length;
   const totalQuita = filasClasificadas.filter((f) => f.tipo === "QUITA_PCD").length;
-  const totalCompulsa = filasClasificadas.filter((f) => f.tipo === "COMPULSA").length;
 
-  // Ítems reales (sumando columnas de años) por categoría
+  // Filas con anios_1 > 0 = todas las plazas de 1 año (compulsa), sin importar clasificación de detalle
+  const filasConAnio1 = convocatoriaRecords.filter((r) => (r.anios_1 ?? 0) > 0);
+  const totalCompulsa = filasConAnio1.length; // total de filas reales con plaza de 1 año
+  // Solo docentes/catedráticos con 1 año
+  const totalCompulsaDocente = filasConAnio1.filter(
+    (r) => r.categoria === "DOCENTE" || r.cargo_raw?.includes("CATEDRATICO") || r.cargo_raw?.includes("DOCENTE")
+  ).length;
+
+  // Suma real de columna anios_1 (puede haber filas con anios_1 > 1)
+  const itemsCompulsa = convocatoriaRecords.reduce((acc, r) => acc + (r.anios_1 ?? 0), 0);
+  const itemsCompulsaDocente = filasConAnio1
+    .filter((r) => r.categoria === "DOCENTE" || r.cargo_raw?.includes("CATEDRATICO") || r.cargo_raw?.includes("DOCENTE"))
+    .reduce((acc, r) => acc + (r.anios_1 ?? 0), 0);
+
+  // Ítems reales de inamovilidad
   const itemsInamovilidad = filasClasificadas
     .filter((f) => f.tipo === "INAMOBILIDAD")
     .reduce((acc, f) => acc + f.anios3 + f.anios2 + f.anios1, 0);
-  const itemsCompulsa = filasClasificadas
-    .filter((f) => f.tipo === "COMPULSA")
-    .reduce((acc, f) => acc + f.anios1, 0); // Compulsa únicamente cuenta 1 año
-  const itemsSinInamovilidad = itemsInamovilidad - totalInamovilidad; // -1 por cada fila inamovilidad
 
 
   // Filtrado reactivo por chips, departamento, ESFM y búsqueda
@@ -193,8 +202,14 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             <FileText size={16} color="#3b82f6" />
             Compulsas / 1 Año
           </div>
-          <div className="val" style={{ color: "#bfdbfe" }}>{totalCompulsa} <span style={{ fontSize: "0.9rem", color: "#93c5fd" }}>filas</span></div>
-          <span className="badge badge-blue">{itemsCompulsa} ítems (1 Año)</span>
+          <div className="val" style={{ color: "#bfdbfe" }}>
+            {totalCompulsa} <span style={{ fontSize: "0.9rem", color: "#93c5fd" }}>filas</span>
+          </div>
+          <span className="badge badge-blue">{itemsCompulsa} ítems totales col. 1Año</span>
+          <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "4px" }}>
+            Docente/Catálog: <strong style={{ color: "#93c5fd" }}>{totalCompulsaDocente} filas</strong>
+            {" / "}<strong style={{ color: "#bfdbfe" }}>{itemsCompulsaDocente} ítems</strong>
+          </div>
         </div>
       </div>
 
