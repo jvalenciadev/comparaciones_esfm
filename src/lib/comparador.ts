@@ -16,19 +16,41 @@ export const DEFAULT_CONFIG_CONVOCATORIA: ConfiguracionConvocatoria = {
   incluir3Anios: true,
   incluir2Anios: true,
   incluir1Anio: false, // Compulsa
+  categoriaPersonal: "DOCENTES",
   modoDetalle: "TODOS",
 };
+
+export function esRegistroDocente(row: BaseRecord): boolean {
+  if (row.categoria === "DOCENTE") return true;
+  const c = (row.cargo_raw || "").toUpperCase();
+  const ck = (row.cargo_key || "").toUpperCase();
+  return (
+    c.includes("CATEDRATICO") ||
+    c.includes("DOCENTE") ||
+    ck.includes("CATEDRATICO") ||
+    ck.includes("DOCENTE")
+  );
+}
+
+export function cumpleCategoriaPersonal(
+  row: BaseRecord,
+  cat?: "DOCENTES" | "ADMINISTRATIVOS" | "TODOS"
+): boolean {
+  if (!cat || cat === "TODOS") return true;
+  const isDoc = esRegistroDocente(row);
+  return cat === "DOCENTES" ? isDoc : !isDoc;
+}
 
 export function calcularItemsFila(
   row: BaseRecord,
   config: ConfiguracionConvocatoria
 ): number {
+  if (!cumpleCategoriaPersonal(row, config.categoriaPersonal)) {
+    return 0;
+  }
+
   const detalle = (row.detalle || "").trim().toUpperCase();
   const esInamovilidad = detalle.includes("INAMOBILIDAD");
-  const esDocente =
-    row.categoria === "DOCENTE" ||
-    (row.cargo_raw || "").toUpperCase().includes("CATEDRATICO") ||
-    (row.cargo_raw || "").toUpperCase().includes("DOCENTE");
 
   // Base de ítems según columnas seleccionadas
   let total = 0;
@@ -40,14 +62,14 @@ export function calcularItemsFila(
     // Oficial = filas con detalle vacío (sin modificaciones ni inamovilidades)
     if (detalle !== "") return 0;
   } else if (config.modoDetalle === "SIN_INAMOVILIDAD") {
-    // Inamovilidad: solo se descuenta -1 en filas de docentes con inamovilidad (20 en total)
-    if (esInamovilidad && esDocente) return Math.max(0, total - 1);
+    // Inamovilidad: descuenta -1 por plaza protegida de la categoría seleccionada
+    if (esInamovilidad) return Math.max(0, total - 1);
   } else if (config.modoDetalle === "SOLO_INAMOVILIDAD") {
-    // Cada docente con inamovilidad = 1 plaza protegida (total = 20)
-    if (!esInamovilidad || !esDocente) return 0;
+    // Cada fila con inamovilidad de la categoría = 1 plaza protegida
+    if (!esInamovilidad) return 0;
     return 1;
   } else if (config.modoDetalle === "SOLO_COMPULSA") {
-    // Compulsa = suma directa columna 1 año de TODAS las filas
+    // Compulsa = suma directa columna 1 año de filas que cumplen con la categoría
     return row.anios_1 ?? 0;
   } else if (config.modoDetalle === "SOLO_MODIFICACIONES") {
     if (!detalle.includes("QUITO") && !detalle.includes("INCREMENT")) return 0;
@@ -130,6 +152,11 @@ export function construirTablaComparativa(
   }
 
   let universo = Array.from(mapUniverso.values());
+  if (config.categoriaPersonal === "DOCENTES") {
+    universo = universo.filter((r) => r.categoria === "DOCENTE");
+  } else if (config.categoriaPersonal === "ADMINISTRATIVOS") {
+    universo = universo.filter((r) => r.categoria !== "DOCENTE");
+  }
 
   const deptoMapByEsfm: Record<string, Set<string>> = {};
   for (const item of universo) {
@@ -324,6 +351,7 @@ export function resumenPorEsfm(
 
   // 1. Gestión 2023
   for (const r of g23List) {
+    if (!cumpleCategoriaPersonal(r, config.categoriaPersonal)) continue;
     const key = r.esfm_key;
     const existing = map.get(key);
     const cnt = r.total_items ?? 1;
@@ -345,17 +373,14 @@ export function resumenPorEsfm(
 
   // 2. Publicación Convocatoria
   for (const r of convList) {
+    if (!cumpleCategoriaPersonal(r, config.categoriaPersonal)) continue;
     const key = r.esfm_key;
     const existing = map.get(key);
     const a3 = r.anios_3 ?? 0;
     const a2 = r.anios_2 ?? 0;
     const a1 = r.anios_1 ?? 0;
     const itemsCalc = calcularItemsFila(r, config);
-    const esDoc =
-      r.categoria === "DOCENTE" ||
-      (r.cargo_raw || "").toUpperCase().includes("CATEDRATICO") ||
-      (r.cargo_raw || "").toUpperCase().includes("DOCENTE");
-    const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") && esDoc ? 1 : 0;
+    const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") ? 1 : 0;
 
     if (!existing) {
       map.set(key, {
@@ -408,13 +433,13 @@ export function calcularControlTopes(
   const df_conv = dfs.publicacion_convocatoria;
   if (!df_sep || !df_conv) return [];
 
-  // Docentes en Planilla SEP (Tope Máximo Presupuestario)
-  const sepDocs = df_sep.filter(
-    (r) => r.cargo_key.includes("CATEDRATICO") || r.cargo_key.includes("DOCENTE")
+  // Registros en Planilla SEP (Tope Máximo Presupuestario según categoría)
+  const sepFiltrados = df_sep.filter((r) =>
+    cumpleCategoriaPersonal(r, config.categoriaPersonal)
   );
 
   const topeMap = new Map<string, { departamento: string; esfm_raw: string; tope: number }>();
-  for (const r of sepDocs) {
+  for (const r of sepFiltrados) {
     const key = `${r.departamento}___${r.esfm_key}`;
     const item = topeMap.get(key);
     if (!item) {
@@ -424,8 +449,10 @@ export function calcularControlTopes(
     }
   }
 
-  // Docentes Convocados en Publicación Convocatoria
-  const convDocs = df_conv.filter((r) => r.categoria === "DOCENTE");
+  // Convocados en Publicación Convocatoria según categoría
+  const convFiltrados = df_conv.filter((r) =>
+    cumpleCategoriaPersonal(r, config.categoriaPersonal)
+  );
   const convMap = new Map<
     string,
     {
@@ -439,7 +466,7 @@ export function calcularControlTopes(
     }
   >();
 
-  for (const r of convDocs) {
+  for (const r of convFiltrados) {
     const key = `${r.departamento}___${r.esfm_key}`;
     const item = convMap.get(key);
     const cnt = calcularItemsFila(r, config);
@@ -447,6 +474,7 @@ export function calcularControlTopes(
     const a2 = r.anios_2 ?? 0;
     const a1 = r.anios_1 ?? 0;
     const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") ? 1 : 0;
+
 
     if (!item) {
       convMap.set(key, {

@@ -20,13 +20,14 @@ export interface ConfiguracionConvocatoria {
   incluir3Anios: boolean;
   incluir2Anios: boolean;
   incluir1Anio: boolean;
+  categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "TODOS";
   modoDetalle:
-    | "TODOS"
-    | "SOLO_OFICIAL"
-    | "SIN_INAMOVILIDAD"
-    | "SOLO_INAMOVILIDAD"
-    | "SOLO_COMPULSA"
-    | "SOLO_MODIFICACIONES";
+  | "TODOS"
+  | "SOLO_OFICIAL"
+  | "SIN_INAMOVILIDAD"
+  | "SOLO_INAMOVILIDAD"
+  | "SOLO_COMPULSA"
+  | "SOLO_MODIFICACIONES";
 }
 
 export interface FilaResumen {

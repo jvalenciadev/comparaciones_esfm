@@ -222,6 +222,25 @@ export default function Home() {
             Ajuste de Convocatoria
           </div>
 
+          <div className="form-group" style={{ marginBottom: "8px" }}>
+            <label className="form-label" style={{ fontSize: "0.72rem" }}>Personal / Categoría:</label>
+            <select
+              value={configConvocatoria.categoriaPersonal || "DOCENTES"}
+              onChange={(e) =>
+                setConfigConvocatoria({
+                  ...configConvocatoria,
+                  categoriaPersonal: e.target.value as ConfiguracionConvocatoria["categoriaPersonal"],
+                })
+              }
+              className="form-select"
+              style={{ fontSize: "0.78rem", padding: "6px 8px" }}
+            >
+              <option value="DOCENTES">🎓 Solo Docentes (Catedráticos)</option>
+              <option value="ADMINISTRATIVOS">💼 Solo Administrativos / Directivos</option>
+              <option value="TODOS">🌐 General (Docentes + Adm.)</option>
+            </select>
+          </div>
+
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.8rem" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", color: "#f3f4f6" }}>
               <input
@@ -452,6 +471,7 @@ export default function Home() {
               controlTopes={controlTopes}
               filtroDepto={filtroDepto}
               filtroEsfm={filtroEsfm}
+              categoriaPersonal={configConvocatoria.categoriaPersonal}
             />
           )}
 

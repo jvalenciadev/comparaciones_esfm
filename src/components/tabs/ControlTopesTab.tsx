@@ -9,14 +9,23 @@ interface Props {
   controlTopes: FilaControlTope[];
   filtroDepto: string;
   filtroEsfm: string;
+  categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "TODOS";
 }
 
 export const ControlTopesTab: React.FC<Props> = ({
   controlTopes,
   filtroDepto,
   filtroEsfm,
+  categoriaPersonal = "DOCENTES",
 }) => {
   const [filtroEstado, setFiltroEstado] = useState<string>("TODOS");
+
+  const labelCat =
+    categoriaPersonal === "ADMINISTRATIVOS"
+      ? "Administrativos"
+      : categoriaPersonal === "TODOS"
+      ? "Personal (General)"
+      : "Docentes";
 
   const filtrados = useMemo(() => {
     return controlTopes.filter((r) => {
@@ -42,22 +51,22 @@ export const ControlTopesTab: React.FC<Props> = ({
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div>
         <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "8px" }}>
-          🎯 Verificación de Tope de Docentes Requeridos (Planilla SEP vs Convocatoria Oficial)
+          🎯 Verificación de Tope de {labelCat} Requeridos (Planilla SEP vs Convocatoria Oficial)
         </h3>
         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
-          La Planilla SEP (PLA0926_DGFM estado=1) establece el tope presupuestario asignado. Este módulo compara con la Convocatoria Oficial y permite incluir o excluir años (3a, 2a, 1a) e inamovilidades.
+          La Planilla SEP (PLA0926_DGFM estado=1) establece el tope presupuestario asignado. Este módulo compara con la Convocatoria Oficial según la categoría seleccionada ({labelCat.toLowerCase()}) y permite ajustar años (3a, 2a, 1a) e inamovilidades.
         </p>
       </div>
 
       {/* KPI Topes */}
       <div className="metrics-grid">
         <div className="metric-card">
-          <div className="title">Tope Docentes (Planilla SEP)</div>
+          <div className="title">Tope {labelCat} (Planilla SEP)</div>
           <div className="val">{totTope.toLocaleString()}</div>
           <span className="badge badge-blue">Techo Presupuestario</span>
         </div>
         <div className="metric-card">
-          <div className="title">Docentes Convocados (Total)</div>
+          <div className="title">{labelCat} Convocados (Total)</div>
           <div className="val">{totConv.toLocaleString()}</div>
           <span className="badge badge-green">
             3a: {tot3a} | 2a: {tot2a} | 1a: {tot1a}
@@ -73,7 +82,7 @@ export const ControlTopesTab: React.FC<Props> = ({
           </span>
         </div>
         <div className="metric-card">
-          <div className="title">Docentes con Inamovilidad</div>
+          <div className="title">{labelCat} con Inamovilidad</div>
           <div className="val" style={{ color: "#f59e0b" }}>{totInam}</div>
           <span className="badge badge-yellow">Observación Funcionaria</span>
         </div>
