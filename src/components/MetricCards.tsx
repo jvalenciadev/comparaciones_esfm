@@ -13,7 +13,13 @@ export const MetricCards: React.FC<Props> = ({ dfs, controlTopes }) => {
   const countSep = dfs.planilla_sep?.length ?? 0;
   const countSifm = dfs.sifmweb?.length ?? 0;
   const count2023 = dfs.gestion_2023?.reduce((sum, r) => sum + (r.total_items ?? 0), 0) ?? 0;
-  const countPub = dfs.oficial_publicado?.reduce((sum, r) => sum + (r.total_items ?? 0), 0) ?? 0;
+
+  const convList = dfs.publicacion_convocatoria || [];
+  const tot3a = convList.reduce((sum, r) => sum + (r.anios_3 ?? 0), 0);
+  const tot2a = convList.reduce((sum, r) => sum + (r.anios_2 ?? 0), 0);
+  const tot1a = convList.reduce((sum, r) => sum + (r.anios_1 ?? 0), 0);
+  const countConv = tot3a + tot2a + tot1a;
+
   const sobregiros = controlTopes.filter((r) => r.diferencia > 0).length;
 
   return (
@@ -42,16 +48,18 @@ export const MetricCards: React.FC<Props> = ({ dfs, controlTopes }) => {
           Gestión 2023 (Ítems)
         </div>
         <div className="val">{count2023.toLocaleString()}</div>
-        <span className="badge badge-yellow">Suma (3a + 2a)</span>
+        <span className="badge badge-yellow">Línea Base Histórica</span>
       </div>
 
       <div className="metric-card">
         <div className="title">
           <Award size={16} color="#10b981" />
-          Oficial Publicado (Ítems)
+          Publicación Convocatoria
         </div>
-        <div className="val">{countPub.toLocaleString()}</div>
-        <span className="badge badge-green">Convocatoria Vigente</span>
+        <div className="val">{countConv.toLocaleString()}</div>
+        <span className="badge badge-green">
+          3a: {tot3a} | 2a: {tot2a} | 1a: {tot1a}
+        </span>
       </div>
 
       {controlTopes.length > 0 && (

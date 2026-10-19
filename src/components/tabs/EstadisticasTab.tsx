@@ -11,16 +11,16 @@ interface Props {
 export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
   // Consolidado por Departamento
   const deptoStats = useMemo(() => {
-    const map = new Map<string, { total2023: number; totalPub: number; instituciones: number }>();
+    const map = new Map<string, { total2023: number; totalConv: number; instituciones: number }>();
 
     for (const r of resumen) {
       const d = r.departamento || "SIN DEPTO";
       const item = map.get(d);
       if (!item) {
-        map.set(d, { total2023: r.items2023, totalPub: r.itemsOficial, instituciones: 1 });
+        map.set(d, { total2023: r.items2023, totalConv: r.itemsConvocatoria, instituciones: 1 });
       } else {
         item.total2023 += r.items2023;
-        item.totalPub += r.itemsOficial;
+        item.totalConv += r.itemsConvocatoria;
         item.instituciones += 1;
       }
     }
@@ -29,26 +29,26 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
       .map(([departamento, stats]) => ({
         departamento,
         ...stats,
-        diferencia: stats.totalPub - stats.total2023,
+        diferencia: stats.totalConv - stats.total2023,
       }))
-      .sort((a, b) => b.totalPub - a.totalPub);
+      .sort((a, b) => b.totalConv - a.totalConv);
   }, [resumen]);
 
-  const maxVal = Math.max(...deptoStats.map((d) => Math.max(d.total2023, d.totalPub)), 1);
+  const maxVal = Math.max(...deptoStats.map((d) => Math.max(d.total2023, d.totalConv)), 1);
 
   // Docente vs Administrativo
   const catStats = useMemo(() => {
-    let doc2023 = 0, docPub = 0, adm2023 = 0, admPub = 0;
+    let doc2023 = 0, docConv = 0, adm2023 = 0, admConv = 0;
     for (const r of tabla) {
       if (r.categoria === "DOCENTE") {
         doc2023 += r.items_gestion_2023 ?? 0;
-        docPub += r.items_oficial_publicado ?? 0;
+        docConv += r.items_convocatoria ?? 0;
       } else {
         adm2023 += r.items_gestion_2023 ?? 0;
-        admPub += r.items_oficial_publicado ?? 0;
+        admConv += r.items_convocatoria ?? 0;
       }
     }
-    return { doc2023, docPub, adm2023, admPub };
+    return { doc2023, docConv, adm2023, admConv };
   }, [tabla]);
 
   return (
@@ -58,14 +58,14 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
           📈 Tablero Estadístico Nacional
         </h3>
         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
-          Distribución de plazas por Departamento y desagregación por categoría ocupacional.
+          Distribución de plazas por Departamento y desagregación por categoría ocupacional según filtros activos.
         </p>
       </div>
 
       {/* Gráfico de Barras por Departamento */}
       <div className="glass-panel" style={{ padding: "24px" }}>
         <h4 style={{ fontSize: "1rem", fontWeight: 700, color: "#ffffff", marginBottom: "16px" }}>
-          Plazas Convocadas por Departamento (Gestión 2023 vs Oficial Publicado)
+          Plazas por Departamento (Gestión 2023 vs Convocatoria Oficial)
         </h4>
 
         <div style={{ display: "flex", gap: "20px", marginBottom: "20px", fontSize: "0.8rem" }}>
@@ -75,14 +75,14 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <span style={{ width: "12px", height: "12px", background: "#3b82f6", borderRadius: "2px" }} />
-            <span style={{ color: "var(--text-muted)" }}>Oficial Publicado</span>
+            <span style={{ color: "var(--text-muted)" }}>Convocatoria Oficial</span>
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           {deptoStats.map((d, idx) => {
             const pct23 = Math.round((d.total2023 / maxVal) * 100);
-            const pctPub = Math.round((d.totalPub / maxVal) * 100);
+            const pctConv = Math.round((d.totalConv / maxVal) * 100);
 
             return (
               <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -91,7 +91,7 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
                     {d.departamento} <span style={{ color: "#64748b", fontSize: "0.75rem" }}>({d.instituciones} ESFM/UA)</span>
                   </span>
                   <span style={{ fontFamily: "var(--font-mono, monospace)", color: "#cbd5e1" }}>
-                    2023: <strong>{d.total2023}</strong> | Oficial: <strong style={{ color: "#60a5fa" }}>{d.totalPub}</strong> ({d.diferencia >= 0 ? `+${d.diferencia}` : d.diferencia})
+                    2023: <strong>{d.total2023}</strong> | Convocatoria: <strong style={{ color: "#60a5fa" }}>{d.totalConv}</strong> ({d.diferencia >= 0 ? `+${d.diferencia}` : d.diferencia})
                   </span>
                 </div>
 
@@ -100,7 +100,7 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
                     <div style={{ width: `${pct23}%`, background: "#f59e0b", height: "100%", borderRadius: "4px" }} />
                   </div>
                   <div style={{ height: "8px", background: "#1f2937", borderRadius: "4px", overflow: "hidden" }}>
-                    <div style={{ width: `${pctPub}%`, background: "#3b82f6", height: "100%", borderRadius: "4px" }} />
+                    <div style={{ width: `${pctConv}%`, background: "#3b82f6", height: "100%", borderRadius: "4px" }} />
                   </div>
                 </div>
               </div>
@@ -120,13 +120,13 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
             <span style={{ fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>{catStats.doc2023.toLocaleString()}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
-            <span style={{ color: "var(--text-muted)" }}>Oficial Publicado:</span>
-            <span style={{ fontWeight: 700, color: "#60a5fa", fontFamily: "var(--font-mono, monospace)" }}>{catStats.docPub.toLocaleString()}</span>
+            <span style={{ color: "var(--text-muted)" }}>Convocatoria Oficial:</span>
+            <span style={{ fontWeight: 700, color: "#60a5fa", fontFamily: "var(--font-mono, monospace)" }}>{catStats.docConv.toLocaleString()}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
             <span style={{ color: "var(--text-muted)" }}>Variación Neta:</span>
-            <span style={{ fontWeight: 700, color: catStats.docPub >= catStats.doc2023 ? "var(--accent-emerald)" : "var(--accent-amber)", fontFamily: "var(--font-mono, monospace)" }}>
-              {catStats.docPub - catStats.doc2023 >= 0 ? `+${catStats.docPub - catStats.doc2023}` : catStats.docPub - catStats.doc2023}
+            <span style={{ fontWeight: 700, color: catStats.docConv >= catStats.doc2023 ? "var(--accent-emerald)" : "var(--accent-amber)", fontFamily: "var(--font-mono, monospace)" }}>
+              {catStats.docConv - catStats.doc2023 >= 0 ? `+${catStats.docConv - catStats.doc2023}` : catStats.docConv - catStats.doc2023}
             </span>
           </div>
         </div>
@@ -140,13 +140,13 @@ export const EstadisticasTab: React.FC<Props> = ({ tabla, resumen }) => {
             <span style={{ fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>{catStats.adm2023.toLocaleString()}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "8px" }}>
-            <span style={{ color: "var(--text-muted)" }}>Oficial Publicado:</span>
-            <span style={{ fontWeight: 700, color: "#f59e0b", fontFamily: "var(--font-mono, monospace)" }}>{catStats.admPub.toLocaleString()}</span>
+            <span style={{ color: "var(--text-muted)" }}>Convocatoria Oficial:</span>
+            <span style={{ fontWeight: 700, color: "#f59e0b", fontFamily: "var(--font-mono, monospace)" }}>{catStats.admConv.toLocaleString()}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
             <span style={{ color: "var(--text-muted)" }}>Variación Neta:</span>
-            <span style={{ fontWeight: 700, color: catStats.admPub >= catStats.adm2023 ? "var(--accent-emerald)" : "var(--accent-amber)", fontFamily: "var(--font-mono, monospace)" }}>
-              {catStats.admPub - catStats.adm2023 >= 0 ? `+${catStats.admPub - catStats.adm2023}` : catStats.admPub - catStats.adm2023}
+            <span style={{ fontWeight: 700, color: catStats.admConv >= catStats.adm2023 ? "var(--accent-emerald)" : "var(--accent-amber)", fontFamily: "var(--font-mono, monospace)" }}>
+              {catStats.admConv - catStats.adm2023 >= 0 ? `+${catStats.admConv - catStats.adm2023}` : catStats.admConv - catStats.adm2023}
             </span>
           </div>
         </div>

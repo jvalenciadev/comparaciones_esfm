@@ -183,3 +183,70 @@ export function cargarArchivoConAnios(
 
   return records;
 }
+
+export function cargarPublicacionConvocatoria(buffer: ArrayBuffer): BaseRecord[] {
+  const rawRows = parseWorkbook(buffer);
+  if (rawRows.length === 0) return [];
+
+  const columns = Object.keys(rawRows[0] || {});
+  const colDep = colFuzzy(columns, ["departamento", "depto", "dpto"]);
+  const colEsfm = colFuzzy(columns, ["esfm", "esfm/ua", "ua", "nom_ins", "institucion"]);
+  const colCargo = colFuzzy(columns, ["cargo", "nom_cargo"]);
+  const colEsp = colFuzzy(columns, ["especialidades", "especialidad", "desc_cargo", "descripcion"]);
+  const col3a = colFuzzy(columns, ["3_anos", "3 años", "3anos", "tres_anos", "3_a"]);
+  const col2a = colFuzzy(columns, ["2_anos", "2 años", "2anos", "dos_anos", "2_a"]);
+  const col1a = colFuzzy(columns, ["1_ano", "1 año", "1ano", "un_ano", "1_a"]);
+  const colDet = colFuzzy(columns, ["detalle", "observacion", "observaciones", "det"]);
+
+  const records: BaseRecord[] = [];
+  for (const row of rawRows) {
+    const depRaw = colDep ? String(row[colDep] ?? "") : "";
+    const departamento = normalizarDepartamento(depRaw);
+    const esfm_raw = colEsfm ? String(row[colEsfm] ?? "").trim().toUpperCase() : "";
+    if (!esfm_raw) continue;
+
+    const esfm_key = claveInstitucion(departamento, esfm_raw);
+    const c_raw = colCargo ? String(row[colCargo] ?? "").trim().toUpperCase() : "";
+    const esp_raw = colEsp ? String(row[colEsp] ?? "").trim().toUpperCase() : "";
+
+    const isDoc = c_raw.includes("CATEDRATICO") || c_raw.includes("DOCENTE");
+    const categoria = isDoc
+      ? "DOCENTE"
+      : esp_raw === "DIRECTIVO" || c_raw.includes("DIRECTOR")
+      ? "DIRECTIVO"
+      : "ADMINISTRATIVO";
+
+    const descripcion = isDoc && esp_raw && esp_raw !== "ADMINISTRATIVO"
+      ? esp_raw
+      : (c_raw || esp_raw);
+
+    const n3 = col3a ? parseInt(String(row[col3a] || "0"), 10) : 0;
+    const n2 = col2a ? parseInt(String(row[col2a] || "0"), 10) : 0;
+    const n1 = col1a ? parseInt(String(row[col1a] || "0"), 10) : 0;
+    const anios_3 = isNaN(n3) ? 0 : n3;
+    const anios_2 = isNaN(n2) ? 0 : n2;
+    const anios_1 = isNaN(n1) ? 0 : n1;
+
+    const detalle = colDet ? String(row[colDet] ?? "").trim() : "";
+
+    records.push({
+      departamento,
+      esfm_raw,
+      esfm_key,
+      cargo_raw: c_raw,
+      cargo_key: normalizarCargo(c_raw),
+      descripcion,
+      desc_key: normalizarCargo(descripcion),
+      categoria,
+      anios_3,
+      anios_2,
+      anios_1,
+      total_items: anios_3 + anios_2 + anios_1,
+      detalle,
+      fuente: "publicacion_convocatoria",
+    });
+  }
+
+  return records;
+}
+

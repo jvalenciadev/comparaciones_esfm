@@ -1,21 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect } from "react";
 import {
   DataSources,
   FilaComparativa,
   FilaResumen,
   FilaControlTope,
+  ConfiguracionConvocatoria,
 } from "../types";
 import {
   cargarPlanillaSep,
   cargarSifmweb,
   cargarArchivoConAnios,
+  cargarPublicacionConvocatoria,
 } from "../lib/cargadores";
 import {
   construirTablaComparativa,
   resumenPorEsfm,
   calcularControlTopes,
+  DEFAULT_CONFIG_CONVOCATORIA,
 } from "../lib/comparador";
 import { MetricCards } from "../components/MetricCards";
 import { ControlTopesTab } from "../components/tabs/ControlTopesTab";
@@ -25,14 +28,14 @@ import {
   FolderUp,
   FileSpreadsheet,
   CheckCircle2,
-  AlertCircle,
   Zap,
   Filter,
   BarChart3,
+  Layers,
   Building2,
   Target,
+  SlidersHorizontal,
   Globe,
-  Layers,
 } from "lucide-react";
 
 export default function Home() {
@@ -45,57 +48,79 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Filtros
+  // Configuración flexible de comparación (3 años, 2 años, 1 año compulsa, modo detalle)
+  const [configConvocatoria, setConfigConvocatoria] =
+    useState<ConfiguracionConvocatoria>(DEFAULT_CONFIG_CONVOCATORIA);
+
+  // Filtros de navegación
   const [filtroDepto, setFiltroDepto] = useState<string>("");
   const [filtroEsfm, setFiltroEsfm] = useState<string>("");
 
-  // Listas de opciones para filtros
+  // Listas de opciones dinámicas para filtros
   const opcionesDepto = React.useMemo(() => {
-    return Array.from(new Set(tabla.map((r) => r.departamento).filter(Boolean))).sort();
-  }, [tabla]);
+    return Array.from(
+      new Set(
+        (dfs.planilla_sep || [])
+          .map((r) => r.departamento)
+          .concat((dfs.publicacion_convocatoria || []).map((r) => r.departamento))
+          .filter(Boolean)
+      )
+    ).sort();
+  }, [dfs]);
 
   const opcionesEsfm = React.useMemo(() => {
-    const list = filtroDepto ? tabla.filter((r) => r.departamento === filtroDepto) : tabla;
-    return Array.from(new Set(list.map((r) => r.esfm_display).filter(Boolean))).sort();
-  }, [tabla, filtroDepto]);
+    const list = filtroDepto
+      ? (dfs.planilla_sep || [])
+        .concat(dfs.publicacion_convocatoria || [])
+        .filter((r) => r.departamento === filtroDepto)
+      : (dfs.planilla_sep || []).concat(dfs.publicacion_convocatoria || []);
+    return Array.from(new Set(list.map((r) => r.esfm_raw).filter(Boolean))).sort();
+  }, [dfs, filtroDepto]);
 
-  // Función para procesar y actualizar estado centralizado
-  const procesarDatasets = (sources: DataSources) => {
-    const t = construirTablaComparativa(sources);
-    const r = resumenPorEsfm(t);
-    const c = calcularControlTopes(sources);
+  // Procesamiento y actualización centralizada con la configuración activa
+  const procesarDatasets = (sources: DataSources, config: ConfiguracionConvocatoria) => {
+    const t = construirTablaComparativa(sources, config);
+    const r = resumenPorEsfm(sources, config);
+    const c = calcularControlTopes(sources, config);
 
     setTabla(t);
     setResumen(r);
     setControlTopes(c);
   };
 
-  // Carga automática o por clic de los 4 archivos predeterminados del sistema
+  // Reaccionar a cambios en configConvocatoria
+  useEffect(() => {
+    if (Object.keys(dfs).length > 0) {
+      procesarDatasets(dfs, configConvocatoria);
+    }
+  }, [configConvocatoria]);
+
+  // Carga automática de los 4 archivos base
   const cargarArchivosPredeterminados = async () => {
     setIsLoading(true);
-    setStatusMessage("Cargando y procesando los 4 archivos Excel del sistema...");
+    setStatusMessage("Cargando y procesando los 4 archivos Excel oficiales...");
     try {
-      const [resSep, resSifm, res2023, resPub] = await Promise.all([
+      const [resSep, resSifm, res2023, resConv] = await Promise.all([
         fetch("/data/PLA0926_DGFM SEPTIEMBRE.xlsx").then((r) => r.arrayBuffer()),
         fetch("/data/DATOS SIFMWEB.xlsx").then((r) => r.arrayBuffer()),
         fetch("/data/GESTION 2023.xlsx").then((r) => r.arrayBuffer()),
-        fetch("/data/OFICIAL PUBLICADO.xlsx").then((r) => r.arrayBuffer()),
+        fetch("/data/PUBLICACION CONVOCATORIA.xlsx").then((r) => r.arrayBuffer()),
       ]);
 
       const planilla_sep = cargarPlanillaSep(resSep);
       const sifmweb = cargarSifmweb(resSifm);
       const gestion_2023 = cargarArchivoConAnios(res2023, "gestion_2023");
-      const oficial_publicado = cargarArchivoConAnios(resPub, "oficial_publicado");
+      const publicacion_convocatoria = cargarPublicacionConvocatoria(resConv);
 
       const nuevosDfs: DataSources = {
         planilla_sep,
         sifmweb,
         gestion_2023,
-        oficial_publicado,
+        publicacion_convocatoria,
       };
 
       setDfs(nuevosDfs);
-      procesarDatasets(nuevosDfs);
+      procesarDatasets(nuevosDfs, configConvocatoria);
       setStatusMessage(null);
     } catch (err: any) {
       console.error(err);
@@ -105,16 +130,12 @@ export default function Home() {
     }
   };
 
-  // Carga automática inicial en montaje
   useEffect(() => {
     cargarArchivosPredeterminados();
   }, []);
 
   // Manejo de subida manual de archivos
-  const handleFileUpload = async (
-    key: keyof DataSources,
-    file: File
-  ) => {
+  const handleFileUpload = async (key: keyof DataSources, file: File) => {
     setIsLoading(true);
     try {
       const buffer = await file.arrayBuffer();
@@ -125,13 +146,13 @@ export default function Home() {
         records = cargarSifmweb(buffer);
       } else if (key === "gestion_2023") {
         records = cargarArchivoConAnios(buffer, "gestion_2023");
-      } else if (key === "oficial_publicado") {
-        records = cargarArchivoConAnios(buffer, "oficial_publicado");
+      } else if (key === "publicacion_convocatoria") {
+        records = cargarPublicacionConvocatoria(buffer);
       }
 
       const nuevosDfs = { ...dfs, [key]: records };
       setDfs(nuevosDfs);
-      procesarDatasets(nuevosDfs);
+      procesarDatasets(nuevosDfs, configConvocatoria);
     } catch (err: any) {
       alert(`Error procesando archivo ${file.name}: ${err.message}`);
     } finally {
@@ -145,16 +166,18 @@ export default function Home() {
       <aside className="app-sidebar">
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-            <div style={{
-              width: "38px",
-              height: "38px",
-              borderRadius: "10px",
-              background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 0 15px rgba(59, 130, 246, 0.4)"
-            }}>
+            <div
+              style={{
+                width: "38px",
+                height: "38px",
+                borderRadius: "10px",
+                background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 0 15px rgba(59, 130, 246, 0.4)",
+              }}
+            >
               <Layers size={20} color="#ffffff" />
             </div>
             <div>
@@ -167,11 +190,11 @@ export default function Home() {
             </div>
           </div>
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-            Centralizador y comparador de convocatorias docentes y administrativas de Bolivia.
+            Auditoría y conciliación de plazas con Publicación Convocatoria oficial.
           </p>
         </div>
 
-        {/* Botón de carga rápida de archivos del proyecto */}
+        {/* Botón de carga rápida */}
         <button
           onClick={cargarArchivosPredeterminados}
           disabled={isLoading}
@@ -179,21 +202,97 @@ export default function Home() {
           style={{ width: "100%", justifyContent: "center" }}
         >
           <Zap size={16} />
-          {isLoading ? "Procesando Datos..." : "Cargar 4 Archivos Base"}
+          {isLoading ? "Procesando..." : "Cargar Archivos Base"}
         </button>
 
-        {/* Fuentes de Datos Manuales */}
+        {/* ─── CONTROLES DE COMPARACIÓN PERSONALIZADA (QUE COMPARE COMO YO QUIERA) ─── */}
+        <div style={{
+          background: "rgba(17, 24, 39, 0.8)",
+          border: "1px solid rgba(59, 130, 246, 0.3)",
+          borderRadius: "var(--radius-md)",
+          padding: "14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+        }}>
+          <div className="form-label" style={{ display: "flex", alignItems: "center", gap: "6px", color: "#60a5fa" }}>
+            <SlidersHorizontal size={14} />
+            Ajuste de Convocatoria
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.8rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", color: "#f3f4f6" }}>
+              <input
+                type="checkbox"
+                checked={configConvocatoria.incluir3Anios}
+                onChange={(e) =>
+                  setConfigConvocatoria({ ...configConvocatoria, incluir3Anios: e.target.checked })
+                }
+                style={{ accentColor: "var(--accent-blue)" }}
+              />
+              Incluir 3 Años
+            </label>
+
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", color: "#f3f4f6" }}>
+              <input
+                type="checkbox"
+                checked={configConvocatoria.incluir2Anios}
+                onChange={(e) =>
+                  setConfigConvocatoria({ ...configConvocatoria, incluir2Anios: e.target.checked })
+                }
+                style={{ accentColor: "var(--accent-blue)" }}
+              />
+              Incluir 2 Años
+            </label>
+
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", color: configConvocatoria.incluir1Anio ? "#c4b5fd" : "#9ca3af" }}>
+              <input
+                type="checkbox"
+                checked={configConvocatoria.incluir1Anio}
+                onChange={(e) =>
+                  setConfigConvocatoria({ ...configConvocatoria, incluir1Anio: e.target.checked })
+                }
+                style={{ accentColor: "var(--accent-indigo)" }}
+              />
+              Incluir 1 Año (Compulsa)
+            </label>
+          </div>
+
+          <div className="form-group" style={{ marginTop: "4px" }}>
+            <label className="form-label" style={{ fontSize: "0.72rem" }}>Tratamiento de Detalle:</label>
+            <select
+              value={configConvocatoria.modoDetalle}
+              onChange={(e) =>
+                setConfigConvocatoria({
+                  ...configConvocatoria,
+                  modoDetalle: e.target.value as ConfiguracionConvocatoria["modoDetalle"],
+                })
+              }
+              className="form-select"
+              style={{ fontSize: "0.78rem", padding: "6px 8px" }}
+            >
+              <option value="TODOS">Todos (Convocatoria Completa)</option>
+              <option value="SOLO_OFICIAL">🔵 Solo Oficial (Sin Detalle / Vacío)</option>
+              <option value="SIN_INAMOVILIDAD">🟢 Sin Inamovilidad (Descontada)</option>
+              <option value="SOLO_INAMOVILIDAD">🟡 Solo Inamovilidad</option>
+              <option value="SOLO_COMPULSA">🟣 Solo Compulsa (1 Año / Reposición)</option>
+              <option value="SOLO_MODIFICACIONES">🔴 Solo Modificaciones (Quitas/Incrementos)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Fuentes de Datos */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <div className="form-label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <FolderUp size={14} />
-            Cargar / Actualizar Archivos
+            Fuentes de Datos Excel
           </div>
 
           {[
             { key: "planilla_sep" as const, label: "1. Planilla SEP (Septiembre)", count: dfs.planilla_sep?.length },
             { key: "sifmweb" as const, label: "2. DATOS SIFMWEB", count: dfs.sifmweb?.length },
             { key: "gestion_2023" as const, label: "3. GESTIÓN 2023 (3/2 años)", count: dfs.gestion_2023?.length },
-            { key: "oficial_publicado" as const, label: "4. OFICIAL PUBLICADO", count: dfs.oficial_publicado?.length },
+            { key: "publicacion_convocatoria" as const, label: "4. PUBLICACIÓN CONVOCATORIA", count: dfs.publicacion_convocatoria?.length },
           ].map(({ key, label, count }) => (
             <label
               key={key}
@@ -226,11 +325,11 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Filtros dinámicos */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
+        {/* Filtros Geográficos e Institucionales */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "14px" }}>
           <div className="form-label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <Filter size={14} />
-            Filtros del Sistema
+            Filtros
           </div>
 
           <div className="form-group">
@@ -279,7 +378,7 @@ export default function Home() {
           <div>
             <h1>Sistema Comparativo ESFM/UA — Bolivia</h1>
             <p>
-              Auditoría y conciliación de plazas docentes y administrativas (SEP, SIFMWEB, Gestión 2023, Convocatoria Oficial).
+              Auditoría y conciliación de plazas con Publicación Convocatoria Oficial (Análisis a 3 años, 2 años, 1 año compulsa y detalle).
             </p>
           </div>
 
@@ -292,15 +391,17 @@ export default function Home() {
         </header>
 
         {statusMessage && (
-          <div style={{
-            background: "rgba(59, 130, 246, 0.15)",
-            border: "1px solid rgba(59, 130, 246, 0.3)",
-            borderRadius: "var(--radius-md)",
-            padding: "12px 16px",
-            marginTop: "16px",
-            fontSize: "0.85rem",
-            color: "#bfdbfe"
-          }}>
+          <div
+            style={{
+              background: "rgba(59, 130, 246, 0.15)",
+              border: "1px solid rgba(59, 130, 246, 0.3)",
+              borderRadius: "var(--radius-md)",
+              padding: "12px 16px",
+              marginTop: "16px",
+              fontSize: "0.85rem",
+              color: "#bfdbfe",
+            }}
+          >
             {statusMessage}
           </div>
         )}
@@ -315,7 +416,7 @@ export default function Home() {
             className={`tab-button ${activeTab === "topes" ? "active" : ""}`}
           >
             <Target size={17} />
-            🎯 Control de Topes (SEP vs Oficial)
+            🎯 Control de Topes (SEP vs Convocatoria Oficial)
           </button>
 
           <button

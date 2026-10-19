@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { FilaControlTope } from "../../types";
 import { exportarExcelTopes } from "../../lib/exportar";
-import { Download, AlertOctagon, CheckCircle2, AlertCircle } from "lucide-react";
+import { Download, AlertOctagon } from "lucide-react";
 
 interface Props {
   controlTopes: FilaControlTope[];
@@ -30,7 +30,11 @@ export const ControlTopesTab: React.FC<Props> = ({
   }, [controlTopes, filtroDepto, filtroEsfm, filtroEstado]);
 
   const totTope = filtrados.reduce((acc, r) => acc + r.topeSEP, 0);
-  const totConv = filtrados.reduce((acc, r) => acc + r.convocadosOficial, 0);
+  const totConv = filtrados.reduce((acc, r) => acc + r.convocadosTotal, 0);
+  const tot3a = filtrados.reduce((acc, r) => acc + r.anios3, 0);
+  const tot2a = filtrados.reduce((acc, r) => acc + r.anios2, 0);
+  const tot1a = filtrados.reduce((acc, r) => acc + r.anios1, 0);
+  const totInam = filtrados.reduce((acc, r) => acc + r.inamovilidadDocente, 0);
   const totDif = totConv - totTope;
   const exceden = filtrados.filter((r) => r.diferencia > 0);
 
@@ -38,10 +42,10 @@ export const ControlTopesTab: React.FC<Props> = ({
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div>
         <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "8px" }}>
-          🎯 Verificación de Tope de Docentes Requeridos (Planilla SEP vs Oficial Publicado)
+          🎯 Verificación de Tope de Docentes Requeridos (Planilla SEP vs Convocatoria Oficial)
         </h3>
         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
-          La Planilla SEP (PLA0926_DGFM estado=1) establece el tope presupuestario asignado. Este módulo verifica si las plazas docentes convocadas cumplen o exceden dicho límite.
+          La Planilla SEP (PLA0926_DGFM estado=1) establece el tope presupuestario asignado. Este módulo compara con la Convocatoria Oficial y permite incluir o excluir años (3a, 2a, 1a) e inamovilidades.
         </p>
       </div>
 
@@ -50,25 +54,28 @@ export const ControlTopesTab: React.FC<Props> = ({
         <div className="metric-card">
           <div className="title">Tope Docentes (Planilla SEP)</div>
           <div className="val">{totTope.toLocaleString()}</div>
+          <span className="badge badge-blue">Techo Presupuestario</span>
         </div>
         <div className="metric-card">
-          <div className="title">Docentes Convocados (Oficial)</div>
+          <div className="title">Docentes Convocados (Total)</div>
           <div className="val">{totConv.toLocaleString()}</div>
+          <span className="badge badge-green">
+            3a: {tot3a} | 2a: {tot2a} | 1a: {tot1a}
+          </span>
         </div>
         <div className="metric-card">
-          <div className="title">Diferencia Neta Nacional</div>
+          <div className="title">Diferencia Neta</div>
           <div className="val" style={{ color: totDif > 0 ? "var(--accent-rose)" : totDif < 0 ? "var(--accent-amber)" : "var(--accent-emerald)" }}>
             {totDif > 0 ? `+${totDif.toLocaleString()}` : totDif.toLocaleString()}
           </div>
+          <span className={`badge ${totDif > 0 ? "badge-red" : totDif < 0 ? "badge-yellow" : "badge-green"}`}>
+            {totDif > 0 ? "Sobregiro" : totDif < 0 ? "Plazas Disponibles" : "Cuadre Exacto"}
+          </span>
         </div>
         <div className="metric-card">
-          <div className="title">Alertas de Sobregiro</div>
-          <div className="val" style={{ color: exceden.length > 0 ? "var(--accent-rose)" : "var(--accent-emerald)" }}>
-            {exceden.length} {exceden.length === 1 ? "Institución" : "Instituciones"}
-          </div>
-          <span className={`badge ${exceden.length > 0 ? "badge-red" : "badge-green"}`}>
-            {exceden.length > 0 ? "Exceden Tope" : "Cuadre Normal"}
-          </span>
+          <div className="title">Docentes con Inamovilidad</div>
+          <div className="val" style={{ color: "#f59e0b" }}>{totInam}</div>
+          <span className="badge badge-yellow">Observación Funcionaria</span>
         </div>
       </div>
 
@@ -114,21 +121,21 @@ export const ControlTopesTab: React.FC<Props> = ({
             className="btn-secondary"
             style={filtroEstado === "EXCEDE" ? { borderColor: "var(--accent-rose)", background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5" } : {}}
           >
-            🔴 Excede Tope (Sobregiro)
+            🔴 Excede Tope ({controlTopes.filter((r) => r.diferencia > 0).length})
           </button>
           <button
             onClick={() => setFiltroEstado("FALTA")}
             className="btn-secondary"
             style={filtroEstado === "FALTA" ? { borderColor: "var(--accent-amber)", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" } : {}}
           >
-            🟡 Faltan por Convocar
+            🟡 Faltan por Convocar ({controlTopes.filter((r) => r.diferencia < 0).length})
           </button>
           <button
             onClick={() => setFiltroEstado("CUADRE")}
             className="btn-secondary"
             style={filtroEstado === "CUADRE" ? { borderColor: "var(--accent-emerald)", background: "rgba(16, 185, 129, 0.2)", color: "#a7f3d0" } : {}}
           >
-            🟢 Cuadre Exacto
+            🟢 Cuadre Exacto ({controlTopes.filter((r) => r.diferencia === 0).length})
           </button>
         </div>
 
@@ -148,16 +155,20 @@ export const ControlTopesTab: React.FC<Props> = ({
             <tr>
               <th>Departamento</th>
               <th>ESFM / UA</th>
-              <th style={{ textAlign: "right" }}>Tope Docentes (SEP)</th>
-              <th style={{ textAlign: "right" }}>Convocados (Oficial)</th>
-              <th style={{ textAlign: "right" }}>Diferencia (Pub - Tope)</th>
-              <th style={{ textAlign: "center" }}>Estado de Presupuesto</th>
+              <th style={{ textAlign: "right" }}>Tope SEP</th>
+              <th style={{ textAlign: "right" }}>Convocatoria</th>
+              <th style={{ textAlign: "right" }}>3 Años</th>
+              <th style={{ textAlign: "right" }}>2 Años</th>
+              <th style={{ textAlign: "right" }}>1 Año (Comp.)</th>
+              <th style={{ textAlign: "right" }}>Inamovilidad</th>
+              <th style={{ textAlign: "right" }}>Diferencia</th>
+              <th style={{ textAlign: "center" }}>Estado</th>
             </tr>
           </thead>
           <tbody>
             {filtrados.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
+                <td colSpan={10} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
                   No se encontraron registros con los filtros seleccionados.
                 </td>
               </tr>
@@ -167,7 +178,13 @@ export const ControlTopesTab: React.FC<Props> = ({
                   <td style={{ fontWeight: 600 }}>{row.departamento}</td>
                   <td>{row.esfm}</td>
                   <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)" }}>{row.topeSEP}</td>
-                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)" }}>{row.convocadosOficial}</td>
+                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700 }}>{row.convocadosTotal}</td>
+                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#93c5fd" }}>{row.anios3}</td>
+                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#fde68a" }}>{row.anios2}</td>
+                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#c4b5fd" }}>{row.anios1}</td>
+                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: row.inamovilidadDocente > 0 ? "#f59e0b" : "#6b7280" }}>
+                    {row.inamovilidadDocente > 0 ? row.inamovilidadDocente : "—"}
+                  </td>
                   <td style={{
                     textAlign: "right",
                     fontFamily: "var(--font-mono, monospace)",
