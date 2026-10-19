@@ -40,9 +40,14 @@ export function calcularItemsFila(
     // Ej: fila con 3Años=2 e INAMOBILIDAD → queda 2-1=1 (no se elimina la fila)
     if (esInamovilidad) return Math.max(0, total - 1);
   } else if (config.modoDetalle === "SOLO_INAMOVILIDAD") {
+    // Cada fila de inamovilidad = 1 plaza protegida (independiente de los años)
+    // Resultado: total = 20 docentes (una plaza por fila con INAMOBILIDAD)
     if (!esInamovilidad) return 0;
+    return 1;
   } else if (config.modoDetalle === "SOLO_COMPULSA") {
-    if (!detalle.includes("COMPULSA") && (row.anios_1 ?? 0) === 0) return 0;
+    // Compulsa = suma directa columna 1 año de TODAS las filas (incluye las de INAMOBILIDAD con anios_1)
+    // No filtrar por detalle: si tiene anios_1 > 0 cuenta. Total esperado = 133
+    return row.anios_1 ?? 0;
   } else if (config.modoDetalle === "SOLO_MODIFICACIONES") {
     if (!detalle.includes("QUITO") && !detalle.includes("INCREMENT")) return 0;
   }

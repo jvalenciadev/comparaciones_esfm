@@ -87,24 +87,32 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
   const totalIncremento = filasClasificadas.filter((f) => f.tipo === "INCREMENTO").length;
   const totalQuita = filasClasificadas.filter((f) => f.tipo === "QUITA_PCD").length;
 
-  // Filas con anios_1 > 0 = todas las plazas de 1 año (compulsa), sin importar clasificación de detalle
+  // Desglose inamovilidad: docente vs administrativo
+  const filasInam = filasClasificadas.filter((f) => f.tipo === "INAMOBILIDAD");
+  const inamDocente = filasInam.filter(
+    (f) => f.cargo.includes("CATEDRATICO") || f.cargo.includes("DOCENTE")
+  );
+  const inamAdm = filasInam.filter(
+    (f) => !f.cargo.includes("CATEDRATICO") && !f.cargo.includes("DOCENTE")
+  );
+  const totalInamovilidadDocente = inamDocente.length;   // esperado: 20
+  const totalInamovilidadAdm = inamAdm.length;           // esperado: 22
+  // Ítems totales de filas inamovilidad (suma 3a+2a+1a de cada fila)
+  const itemsInamovilidad = filasInam.reduce((acc, f) => acc + f.anios3 + f.anios2 + f.anios1, 0);
+  // Sin inamovilidad: itemsInamovilidad - totalInamovilidad (cada fila -1)
+  const itemsSinInamovilidad = itemsInamovilidad - totalInamovilidad;
+
+  // Filas con anios_1 > 0 = todas las plazas de 1 año (compulsa)
   const filasConAnio1 = convocatoriaRecords.filter((r) => (r.anios_1 ?? 0) > 0);
-  const totalCompulsa = filasConAnio1.length; // total de filas reales con plaza de 1 año
-  // Solo docentes/catedráticos con 1 año
+  const totalCompulsa = filasConAnio1.length;
   const totalCompulsaDocente = filasConAnio1.filter(
     (r) => r.categoria === "DOCENTE" || r.cargo_raw?.includes("CATEDRATICO") || r.cargo_raw?.includes("DOCENTE")
   ).length;
-
-  // Suma real de columna anios_1 (puede haber filas con anios_1 > 1)
-  const itemsCompulsa = convocatoriaRecords.reduce((acc, r) => acc + (r.anios_1 ?? 0), 0);
+  // Suma real columna anios_1 de TODOS los registros
+  const itemsCompulsa = convocatoriaRecords.reduce((acc, r) => acc + (r.anios_1 ?? 0), 0); // esperado: 133
   const itemsCompulsaDocente = filasConAnio1
     .filter((r) => r.categoria === "DOCENTE" || r.cargo_raw?.includes("CATEDRATICO") || r.cargo_raw?.includes("DOCENTE"))
     .reduce((acc, r) => acc + (r.anios_1 ?? 0), 0);
-
-  // Ítems reales de inamovilidad
-  const itemsInamovilidad = filasClasificadas
-    .filter((f) => f.tipo === "INAMOBILIDAD")
-    .reduce((acc, f) => acc + f.anios3 + f.anios2 + f.anios1, 0);
 
 
   // Filtrado reactivo por chips, departamento, ESFM y búsqueda
@@ -160,10 +168,19 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             <ShieldAlert size={16} color="#f59e0b" />
             Inamovilidades
           </div>
-          <div className="val" style={{ color: "#fde68a" }}>{totalInamovilidad} <span style={{ fontSize: "0.9rem", color: "#fbbf24" }}>filas</span></div>
-          <span className="badge badge-yellow">{itemsInamovilidad} ítems totales</span>
-          <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "4px" }}>
-            Sin Inamovilidad: <strong style={{ color: "#a7f3d0" }}>{itemsInamovilidad - totalInamovilidad}</strong> ítems (−1 por fila)
+          <div className="val" style={{ color: "#fde68a" }}>
+            {totalInamovilidad} <span style={{ fontSize: "0.9rem", color: "#fbbf24" }}>filas totales</span>
+          </div>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+            <span className="badge badge-yellow">🎓 Docente: {totalInamovilidadDocente}</span>
+            <span className="badge" style={{ background: "rgba(245,158,11,0.15)", color: "#d97706", border: "1px solid rgba(245,158,11,0.3)" }}>
+              🏢 Adm: {totalInamovilidadAdm}
+            </span>
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "6px" }}>
+            <span>{itemsInamovilidad} ítems en filas con INAMOBILIDAD</span>
+            <br />
+            Sin Inamovilidad: <strong style={{ color: "#a7f3d0" }}>{itemsSinInamovilidad}</strong> ítems (−1 por fila)
           </div>
         </div>
 
