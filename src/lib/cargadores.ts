@@ -94,6 +94,13 @@ export function cargarSifmweb(buffer: ArrayBuffer): BaseRecord[] {
     const cargo_key = normalizarCargo(cargo_raw);
     const tipo_cargo = colTipo ? String(row[colTipo] ?? "").trim().toUpperCase() : "";
 
+    const categoria =
+      tipo_cargo.includes("DOCENTE") || tipo_cargo.includes("CATEDRATICO")
+        ? "DOCENTE"
+        : tipo_cargo.includes("DIRECTIVO")
+        ? "DIRECTIVO"
+        : "ADMINISTRATIVO";
+
     records.push({
       departamento,
       esfm_raw,
@@ -103,6 +110,7 @@ export function cargarSifmweb(buffer: ArrayBuffer): BaseRecord[] {
       tipo_cargo,
       descripcion: cargo_raw,
       desc_key: cargo_key,
+      categoria,
       fuente: "sifmweb",
     });
   }

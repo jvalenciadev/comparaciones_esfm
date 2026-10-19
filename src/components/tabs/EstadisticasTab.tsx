@@ -1,8 +1,13 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { FilaComparativa, FilaResumen, FilaControlTope } from "../../types";
+import { FilaComparativa, FilaResumen, FilaControlTope, BaseRecord } from "../../types";
 import { exportarExcelEstadisticasDepto } from "../../lib/exportar";
+import {
+  cumpleCategoriaPersonal,
+  esRegistroDocente,
+  esRegistroServicio,
+} from "../../lib/comparador";
 import {
   BarChart3,
   GraduationCap,
@@ -11,15 +16,16 @@ import {
   Download,
   Building2,
   Wrench,
-  CheckCircle2,
   Eye,
   EyeOff,
+  Database,
 } from "lucide-react";
 
 interface Props {
   tabla: FilaComparativa[];
   resumen: FilaResumen[];
   controlTopes?: FilaControlTope[];
+  sifmweb?: BaseRecord[];
   categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "SERVICIO" | "TODOS";
 }
 
@@ -27,21 +33,24 @@ export const EstadisticasTab: React.FC<Props> = ({
   tabla,
   resumen,
   controlTopes = [],
+  sifmweb = [],
   categoriaPersonal = "TODOS",
 }) => {
-  // Toggles de visualizacion por fuente
+  // Toggles de visualización interactiva por fuente
   const [mostrarSEP, setMostrarSEP] = useState(true);
-  const [mostrar2023, setMostrar2023] = useState(false); // Desactivado por defecto para evitar ruido
   const [mostrarConv, setMostrarConv] = useState(true);
+  const [mostrarSIFM, setMostrarSIFM] = useState(true); // Nueva comparación solicitada
+  const [mostrar2023, setMostrar2023] = useState(false); // Opcional desactivado por defecto
 
-  // Consolidado por Departamento (SEP vs 2023 vs Convocatoria)
+  // Consolidado por Departamento (SEP vs Convocatoria vs SIFMWEB vs 2023)
   const deptoStats = useMemo(() => {
     const map = new Map<
       string,
       {
         totalSep: number;
-        total2023: number;
         totalConv: number;
+        totalSifm: number;
+        total2023: number;
         instituciones: Set<string>;
       }
     >();
@@ -50,7 +59,13 @@ export const EstadisticasTab: React.FC<Props> = ({
       const d = dep.trim().toUpperCase() || "SIN DEPTO";
       let item = map.get(d);
       if (!item) {
-        item = { totalSep: 0, total2023: 0, totalConv: 0, instituciones: new Set<string>() };
+        item = {
+          totalSep: 0,
+          totalConv: 0,
+          totalSifm: 0,
+          total2023: 0,
+          instituciones: new Set<string>(),
+        };
         map.set(d, item);
       }
       return item;
@@ -63,11 +78,19 @@ export const EstadisticasTab: React.FC<Props> = ({
       if (ct.esfm) item.instituciones.add(ct.esfm);
     }
 
-    // 2. Datos de Gestion 2023 y Convocatoria (resumen)
+    // 2. Datos de SIFMWEB (registros de personal activo en sistema)
+    for (const s of sifmweb) {
+      if (!cumpleCategoriaPersonal(s, categoriaPersonal)) continue;
+      const item = getOrCreate(s.departamento);
+      item.totalSifm += 1;
+      if (s.esfm_raw) item.instituciones.add(s.esfm_raw);
+    }
+
+    // 3. Datos de Convocatoria y Gestión 2023 (resumen)
     for (const r of resumen) {
       const item = getOrCreate(r.departamento);
-      item.total2023 += r.items2023;
       item.totalConv += r.itemsConvocatoria;
+      item.total2023 += r.items2023;
       if (r.esfm) item.instituciones.add(r.esfm);
     }
 
@@ -76,20 +99,23 @@ export const EstadisticasTab: React.FC<Props> = ({
         departamento,
         instituciones: stats.instituciones.size,
         totalSep: stats.totalSep,
-        total2023: stats.total2023,
         totalConv: stats.totalConv,
+        totalSifm: stats.totalSifm,
+        total2023: stats.total2023,
         difVsSep: stats.totalConv - stats.totalSep,
+        difVsSifm: stats.totalConv - stats.totalSifm,
         difVs2023: stats.totalConv - stats.total2023,
       }))
       .sort((a, b) => b.totalConv - a.totalConv);
-  }, [controlTopes, resumen]);
+  }, [controlTopes, sifmweb, resumen, categoriaPersonal]);
 
   const maxVal = Math.max(
     ...deptoStats.map((d) =>
       Math.max(
         mostrarSEP ? d.totalSep : 0,
-        mostrar2023 ? d.total2023 : 0,
-        mostrarConv ? d.totalConv : 0
+        mostrarConv ? d.totalConv : 0,
+        mostrarSIFM ? d.totalSifm : 0,
+        mostrar2023 ? d.total2023 : 0
       )
     ),
     1
@@ -97,42 +123,57 @@ export const EstadisticasTab: React.FC<Props> = ({
 
   // Totales Nacionales
   const totalNacSep = useMemo(() => deptoStats.reduce((acc, d) => acc + d.totalSep, 0), [deptoStats]);
-  const totalNac2023 = useMemo(() => deptoStats.reduce((acc, d) => acc + d.total2023, 0), [deptoStats]);
   const totalNacConv = useMemo(() => deptoStats.reduce((acc, d) => acc + d.totalConv, 0), [deptoStats]);
+  const totalNacSifm = useMemo(() => deptoStats.reduce((acc, d) => acc + d.totalSifm, 0), [deptoStats]);
+  const totalNac2023 = useMemo(() => deptoStats.reduce((acc, d) => acc + d.total2023, 0), [deptoStats]);
+
   const totalDifSep = totalNacConv - totalNacSep;
+  const totalDifSifm = totalNacConv - totalNacSifm;
   const totalDif2023 = totalNacConv - totalNac2023;
 
   // Desglose Ocupacional (Docente, Administrativo, Servicio)
   const catStats = useMemo(() => {
-    let docSep = 0, doc2023 = 0, docConv = 0;
-    let admSep = 0, adm2023 = 0, admConv = 0;
-    let srvSep = 0, srv2023 = 0, srvConv = 0;
+    let docSep = 0, docConv = 0, docSifm = 0, doc2023 = 0;
+    let admSep = 0, admConv = 0, admSifm = 0, adm2023 = 0;
+    let srvSep = 0, srvConv = 0, srvSifm = 0, srv2023 = 0;
 
+    // Desde tabla comparativa
     for (const r of tabla) {
       const cUpper = (r.cargo_display || r.cargo_key || "").toUpperCase();
       const esServicio = cUpper.includes("CHOFER") || cUpper.includes("PORTERO");
 
       if (r.categoria === "DOCENTE") {
         docSep += r.cant_sep ?? 0;
-        doc2023 += r.items_gestion_2023 ?? 0;
         docConv += r.items_convocatoria ?? 0;
+        doc2023 += r.items_gestion_2023 ?? 0;
       } else if (esServicio) {
         srvSep += r.cant_sep ?? 0;
-        srv2023 += r.items_gestion_2023 ?? 0;
         srvConv += r.items_convocatoria ?? 0;
+        srv2023 += r.items_gestion_2023 ?? 0;
       } else {
         admSep += r.cant_sep ?? 0;
-        adm2023 += r.items_gestion_2023 ?? 0;
         admConv += r.items_convocatoria ?? 0;
+        adm2023 += r.items_gestion_2023 ?? 0;
+      }
+    }
+
+    // Desde sifmweb directamente para totalizar según categoría
+    for (const s of sifmweb) {
+      if (esRegistroDocente(s)) {
+        docSifm += 1;
+      } else if (esRegistroServicio(s)) {
+        srvSifm += 1;
+      } else {
+        admSifm += 1;
       }
     }
 
     return {
-      doc: { sep: docSep, g23: doc2023, conv: docConv },
-      adm: { sep: admSep, g23: adm2023, conv: admConv },
-      srv: { sep: srvSep, g23: srv2023, conv: srvConv },
+      doc: { sep: docSep, conv: docConv, sifm: docSifm, g23: doc2023 },
+      adm: { sep: admSep, conv: admConv, sifm: admSifm, g23: adm2023 },
+      srv: { sep: srvSep, conv: srvConv, sifm: srvSifm, g23: srv2023 },
     };
-  }, [tabla]);
+  }, [tabla, sifmweb]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -154,7 +195,7 @@ export const EstadisticasTab: React.FC<Props> = ({
         </button>
       </div>
 
-      {/* ── BARRA DE CONTROL DE FUENTES (FILTROS) ── */}
+      {/* ── BARRA DE CONTROL DE FUENTES (TOGGLES) ── */}
       <div
         style={{
           display: "flex",
@@ -219,6 +260,31 @@ export const EstadisticasTab: React.FC<Props> = ({
           Convocatoria Oficial
         </button>
 
+        {/* Toggle DATOS SIFMWEB */}
+        <button
+          onClick={() => setMostrarSIFM(!mostrarSIFM)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "7px",
+            padding: "6px 14px",
+            borderRadius: "var(--radius-sm)",
+            border: "1.5px solid",
+            cursor: "pointer",
+            fontSize: "0.8rem",
+            fontWeight: 600,
+            transition: "all 0.15s ease",
+            background: mostrarSIFM ? "rgba(16, 185, 129, 0.2)" : "rgba(31, 41, 55, 0.5)",
+            borderColor: mostrarSIFM ? "#10b981" : "#374151",
+            color: mostrarSIFM ? "#a7f3d0" : "#64748b",
+          }}
+          title={mostrarSIFM ? "Clic para ocultar DATOS SIFMWEB" : "Clic para mostrar DATOS SIFMWEB"}
+        >
+          {mostrarSIFM ? <Eye size={14} color="#10b981" /> : <EyeOff size={14} color="#64748b" />}
+          <Database size={13} />
+          Datos SIFMWEB
+        </button>
+
         {/* Toggle Gestión 2023 */}
         <button
           onClick={() => setMostrar2023(!mostrar2023)}
@@ -244,7 +310,7 @@ export const EstadisticasTab: React.FC<Props> = ({
         </button>
 
         <span style={{ marginLeft: "auto", fontSize: "0.76rem", color: "#64748b" }}>
-          {[mostrarSEP, mostrarConv, mostrar2023].filter(Boolean).length} / 3 fuentes activas
+          {[mostrarSEP, mostrarConv, mostrarSIFM, mostrar2023].filter(Boolean).length} / 4 fuentes activas
         </span>
       </div>
 
@@ -266,6 +332,16 @@ export const EstadisticasTab: React.FC<Props> = ({
           </div>
         )}
 
+        {mostrarSIFM && (
+          <div className="metric-card">
+            <div className="title">Datos SIFMWEB</div>
+            <div className="val" style={{ color: "#6ee7b7" }}>{totalNacSifm.toLocaleString()}</div>
+            <span className="badge badge-green" style={{ background: "rgba(16, 185, 129, 0.2)", color: "#a7f3d0" }}>
+              Registrados en Sistema
+            </span>
+          </div>
+        )}
+
         {mostrar2023 && (
           <div className="metric-card">
             <div className="title">Gestión 2023</div>
@@ -282,6 +358,18 @@ export const EstadisticasTab: React.FC<Props> = ({
             </div>
             <span className={`badge ${totalDifSep > 0 ? "badge-red" : totalDifSep < 0 ? "badge-yellow" : "badge-green"}`}>
               {totalDifSep > 0 ? "Sobregiro" : totalDifSep < 0 ? "Capacidad Disponible" : "Cuadre Exacto"}
+            </span>
+          </div>
+        )}
+
+        {mostrarConv && mostrarSIFM && (
+          <div className="metric-card">
+            <div className="title">Balance Conv. vs SIFMWEB</div>
+            <div className="val" style={{ color: totalDifSifm > 0 ? "var(--accent-rose)" : totalDifSifm < 0 ? "var(--accent-amber)" : "var(--accent-emerald)" }}>
+              {totalDifSifm > 0 ? `+${totalDifSifm.toLocaleString()}` : totalDifSifm.toLocaleString()}
+            </div>
+            <span className={`badge ${totalDifSifm > 0 ? "badge-red" : totalDifSifm < 0 ? "badge-yellow" : "badge-green"}`}>
+              {totalDifSifm > 0 ? "Más Plazas que SIFM" : totalDifSifm < 0 ? "Menos Plazas que SIFM" : "Cuadre Exacto"}
             </span>
           </div>
         )}
@@ -311,7 +399,7 @@ export const EstadisticasTab: React.FC<Props> = ({
           </p>
         </div>
 
-        {!mostrarSEP && !mostrar2023 && !mostrarConv && (
+        {!mostrarSEP && !mostrarConv && !mostrarSIFM && !mostrar2023 && (
           <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "0.9rem" }}>
             Activa al menos una fuente en los botones superiores para visualizar los datos.
           </div>
@@ -320,8 +408,9 @@ export const EstadisticasTab: React.FC<Props> = ({
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {deptoStats.map((d, idx) => {
             const pctSep = Math.round((d.totalSep / maxVal) * 100);
-            const pct23 = Math.round((d.total2023 / maxVal) * 100);
             const pctConv = Math.round((d.totalConv / maxVal) * 100);
+            const pctSifm = Math.round((d.totalSifm / maxVal) * 100);
+            const pct23 = Math.round((d.total2023 / maxVal) * 100);
 
             return (
               <div
@@ -341,7 +430,7 @@ export const EstadisticasTab: React.FC<Props> = ({
                     <span style={{ fontWeight: 400, color: "#64748b", fontSize: "0.74rem" }}>({d.instituciones} sedes)</span>
                   </span>
 
-                  <div style={{ display: "flex", gap: "16px", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)" }}>
+                  <div style={{ display: "flex", gap: "14px", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)", flexWrap: "wrap" }}>
                     {mostrarSEP && (
                       <span style={{ color: "#a5b4fc" }}>
                         SEP: <strong>{d.totalSep.toLocaleString()}</strong>
@@ -350,6 +439,11 @@ export const EstadisticasTab: React.FC<Props> = ({
                     {mostrarConv && (
                       <span style={{ color: "#93c5fd" }}>
                         Conv: <strong>{d.totalConv.toLocaleString()}</strong>
+                      </span>
+                    )}
+                    {mostrarSIFM && (
+                      <span style={{ color: "#6ee7b7" }}>
+                        SIFM: <strong>{d.totalSifm.toLocaleString()}</strong>
                       </span>
                     )}
                     {mostrar2023 && (
@@ -362,6 +456,11 @@ export const EstadisticasTab: React.FC<Props> = ({
                         {d.difVsSep > 0 ? `+${d.difVsSep}` : d.difVsSep} vs SEP
                       </span>
                     )}
+                    {mostrarConv && mostrarSIFM && (
+                      <span style={{ color: d.difVsSifm > 0 ? "var(--accent-rose)" : d.difVsSifm < 0 ? "var(--accent-amber)" : "var(--accent-emerald)" }}>
+                        {d.difVsSifm > 0 ? `+${d.difVsSifm}` : d.difVsSifm} vs SIFM
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -369,7 +468,7 @@ export const EstadisticasTab: React.FC<Props> = ({
                 <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                   {mostrarSEP && (
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "0.7rem", color: "#a5b4fc", width: "38px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", flexShrink: 0 }}>SEP</span>
+                      <span style={{ fontSize: "0.7rem", color: "#a5b4fc", width: "42px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", flexShrink: 0 }}>SEP</span>
                       <div style={{ flex: 1, height: "8px", background: "#1e293b", borderRadius: "4px", overflow: "hidden" }}>
                         <div style={{ width: `${pctSep}%`, background: "linear-gradient(90deg, #6366f1, #818cf8)", height: "100%", borderRadius: "4px", transition: "width 0.4s ease" }} />
                       </div>
@@ -379,7 +478,7 @@ export const EstadisticasTab: React.FC<Props> = ({
 
                   {mostrarConv && (
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "0.7rem", color: "#93c5fd", width: "38px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", flexShrink: 0 }}>Conv</span>
+                      <span style={{ fontSize: "0.7rem", color: "#93c5fd", width: "42px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", flexShrink: 0 }}>Conv</span>
                       <div style={{ flex: 1, height: "8px", background: "#1e293b", borderRadius: "4px", overflow: "hidden" }}>
                         <div style={{ width: `${pctConv}%`, background: "linear-gradient(90deg, #2563eb, #3b82f6)", height: "100%", borderRadius: "4px", transition: "width 0.4s ease" }} />
                       </div>
@@ -387,9 +486,19 @@ export const EstadisticasTab: React.FC<Props> = ({
                     </div>
                   )}
 
+                  {mostrarSIFM && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "0.7rem", color: "#6ee7b7", width: "42px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", flexShrink: 0 }}>SIFM</span>
+                      <div style={{ flex: 1, height: "8px", background: "#1e293b", borderRadius: "4px", overflow: "hidden" }}>
+                        <div style={{ width: `${pctSifm}%`, background: "linear-gradient(90deg, #059669, #10b981)", height: "100%", borderRadius: "4px", transition: "width 0.4s ease" }} />
+                      </div>
+                      <span style={{ fontSize: "0.68rem", color: "#64748b", width: "38px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", flexShrink: 0 }}>{d.totalSifm}</span>
+                    </div>
+                  )}
+
                   {mostrar2023 && (
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "0.7rem", color: "#fde68a", width: "38px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", flexShrink: 0 }}>2023</span>
+                      <span style={{ fontSize: "0.7rem", color: "#fde68a", width: "42px", textAlign: "right", fontFamily: "var(--font-mono, monospace)", flexShrink: 0 }}>2023</span>
                       <div style={{ flex: 1, height: "8px", background: "#1e293b", borderRadius: "4px", overflow: "hidden" }}>
                         <div style={{ width: `${pct23}%`, background: "linear-gradient(90deg, #d97706, #f59e0b)", height: "100%", borderRadius: "4px", transition: "width 0.4s ease" }} />
                       </div>
@@ -418,10 +527,12 @@ export const EstadisticasTab: React.FC<Props> = ({
                 <th style={{ textAlign: "center" }}>Sedes</th>
                 {mostrarSEP && <th style={{ textAlign: "right", color: "#c7d2fe" }}>Planilla SEP</th>}
                 {mostrarConv && <th style={{ textAlign: "right", color: "#93c5fd" }}>Convocatoria</th>}
+                {mostrarSIFM && <th style={{ textAlign: "right", color: "#a7f3d0" }}>SIFMWEB</th>}
                 {mostrar2023 && <th style={{ textAlign: "right", color: "#fde68a" }}>Gestión 2023</th>}
                 {mostrarConv && mostrarSEP && <th style={{ textAlign: "right" }}>Dif. vs SEP</th>}
+                {mostrarConv && mostrarSIFM && <th style={{ textAlign: "right", color: "#a7f3d0" }}>Dif. vs SIFM</th>}
                 {mostrarConv && mostrar2023 && <th style={{ textAlign: "right" }}>Dif. vs 2023</th>}
-                <th style={{ textAlign: "center", width: "130px" }}>Visual</th>
+                <th style={{ textAlign: "center", width: "140px" }}>Visual</th>
               </tr>
             </thead>
             <tbody>
@@ -429,11 +540,13 @@ export const EstadisticasTab: React.FC<Props> = ({
                 const maxD = Math.max(
                   mostrarSEP ? d.totalSep : 0,
                   mostrarConv ? d.totalConv : 0,
+                  mostrarSIFM ? d.totalSifm : 0,
                   mostrar2023 ? d.total2023 : 0,
                   1
                 );
                 const pSep = Math.round((d.totalSep / maxD) * 100);
                 const pConv = Math.round((d.totalConv / maxD) * 100);
+                const pSifm = Math.round((d.totalSifm / maxD) * 100);
                 const p23 = Math.round((d.total2023 / maxD) * 100);
 
                 return (
@@ -450,6 +563,11 @@ export const EstadisticasTab: React.FC<Props> = ({
                         {d.totalConv.toLocaleString()}
                       </td>
                     )}
+                    {mostrarSIFM && (
+                      <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#6ee7b7", fontWeight: 600 }}>
+                        {d.totalSifm.toLocaleString()}
+                      </td>
+                    )}
                     {mostrar2023 && (
                       <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#fde68a" }}>
                         {d.total2023.toLocaleString()}
@@ -458,6 +576,11 @@ export const EstadisticasTab: React.FC<Props> = ({
                     {mostrarConv && mostrarSEP && (
                       <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: d.difVsSep > 0 ? "var(--accent-rose)" : d.difVsSep < 0 ? "var(--accent-amber)" : "var(--accent-emerald)" }}>
                         {d.difVsSep > 0 ? `+${d.difVsSep}` : d.difVsSep}
+                      </td>
+                    )}
+                    {mostrarConv && mostrarSIFM && (
+                      <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: d.difVsSifm > 0 ? "var(--accent-rose)" : d.difVsSifm < 0 ? "var(--accent-amber)" : "var(--accent-emerald)" }}>
+                        {d.difVsSifm > 0 ? `+${d.difVsSifm}` : d.difVsSifm}
                       </td>
                     )}
                     {mostrarConv && mostrar2023 && (
@@ -469,7 +592,7 @@ export const EstadisticasTab: React.FC<Props> = ({
                       <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
                         {mostrarSEP && (
                           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                            <span style={{ fontSize: "0.6em", color: "#818cf8", width: "22px", textAlign: "right" }}>SEP</span>
+                            <span style={{ fontSize: "0.6em", color: "#818cf8", width: "24px", textAlign: "right" }}>SEP</span>
                             <div style={{ flex: 1, background: "#1e293b", height: "4px", borderRadius: "2px" }}>
                               <div style={{ width: `${pSep}%`, background: "#818cf8", height: "100%", borderRadius: "2px" }} />
                             </div>
@@ -477,15 +600,23 @@ export const EstadisticasTab: React.FC<Props> = ({
                         )}
                         {mostrarConv && (
                           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                            <span style={{ fontSize: "0.6em", color: "#93c5fd", width: "22px", textAlign: "right" }}>Cv</span>
+                            <span style={{ fontSize: "0.6em", color: "#93c5fd", width: "24px", textAlign: "right" }}>Cv</span>
                             <div style={{ flex: 1, background: "#1e293b", height: "4px", borderRadius: "2px" }}>
                               <div style={{ width: `${pConv}%`, background: "#3b82f6", height: "100%", borderRadius: "2px" }} />
                             </div>
                           </div>
                         )}
+                        {mostrarSIFM && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            <span style={{ fontSize: "0.6em", color: "#10b981", width: "24px", textAlign: "right" }}>SIF</span>
+                            <div style={{ flex: 1, background: "#1e293b", height: "4px", borderRadius: "2px" }}>
+                              <div style={{ width: `${pSifm}%`, background: "#10b981", height: "100%", borderRadius: "2px" }} />
+                            </div>
+                          </div>
+                        )}
                         {mostrar2023 && (
                           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                            <span style={{ fontSize: "0.6em", color: "#fde68a", width: "22px", textAlign: "right" }}>'23</span>
+                            <span style={{ fontSize: "0.6em", color: "#fde68a", width: "24px", textAlign: "right" }}>'23</span>
                             <div style={{ flex: 1, background: "#1e293b", height: "4px", borderRadius: "2px" }}>
                               <div style={{ width: `${p23}%`, background: "#f59e0b", height: "100%", borderRadius: "2px" }} />
                             </div>
@@ -503,10 +634,16 @@ export const EstadisticasTab: React.FC<Props> = ({
                 <td style={{ textAlign: "center" }}>{deptoStats.reduce((acc, d) => acc + d.instituciones, 0)}</td>
                 {mostrarSEP && <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#a5b4fc" }}>{totalNacSep.toLocaleString()}</td>}
                 {mostrarConv && <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#93c5fd" }}>{totalNacConv.toLocaleString()}</td>}
+                {mostrarSIFM && <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#6ee7b7" }}>{totalNacSifm.toLocaleString()}</td>}
                 {mostrar2023 && <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: "#fde68a" }}>{totalNac2023.toLocaleString()}</td>}
                 {mostrarConv && mostrarSEP && (
                   <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: totalDifSep > 0 ? "var(--accent-rose)" : "var(--accent-emerald)" }}>
                     {totalDifSep > 0 ? `+${totalDifSep}` : totalDifSep}
+                  </td>
+                )}
+                {mostrarConv && mostrarSIFM && (
+                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: totalDifSifm > 0 ? "var(--accent-rose)" : "var(--accent-emerald)" }}>
+                    {totalDifSifm > 0 ? `+${totalDifSifm}` : totalDifSifm}
                   </td>
                 )}
                 {mostrarConv && mostrar2023 && (
@@ -545,9 +682,15 @@ export const EstadisticasTab: React.FC<Props> = ({
                   </div>
                 )}
                 {mostrarConv && (
-                  <div style={{ display: "flex", justifyContent: "space-between", borderBottom: mostrar2023 ? "1px solid var(--border-subtle)" : "none", paddingBottom: "5px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "5px" }}>
                     <span style={{ color: "var(--text-muted)" }}>Convocatoria:</span>
                     <span style={{ fontWeight: 700, color: meta.color, fontFamily: "var(--font-mono, monospace)" }}>{vals.conv.toLocaleString()}</span>
+                  </div>
+                )}
+                {mostrarSIFM && (
+                  <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "5px" }}>
+                    <span style={{ color: "var(--text-muted)" }}>Datos SIFMWEB:</span>
+                    <span style={{ fontWeight: 700, color: "#6ee7b7", fontFamily: "var(--font-mono, monospace)" }}>{vals.sifm.toLocaleString()}</span>
                   </div>
                 )}
                 {mostrar2023 && (

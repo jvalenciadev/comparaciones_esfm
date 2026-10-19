@@ -489,6 +489,7 @@ export default function Home() {
               tabla={tabla}
               resumen={resumen}
               controlTopes={controlTopes}
+              sifmweb={dfs.sifmweb || []}
               categoriaPersonal={configConvocatoria.categoriaPersonal}
             />
           )}
