@@ -45,6 +45,7 @@ export interface FilaResumen {
 export interface FilaControlTope {
   departamento: string;
   esfm: string;
+  esfm_key?: string;
   topeSEP: number;
   convocadosTotal: number;
   anios3: number;

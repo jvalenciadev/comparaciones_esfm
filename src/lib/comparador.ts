@@ -555,9 +555,13 @@ export function calcularControlTopes(
       estado = "🟢 CUADRE EXACTO";
     }
 
+    const parts = key.split("___");
+    const esfm_key = parts[1] || "";
+
     filas.push({
       departamento,
       esfm,
+      esfm_key,
       topeSEP,
       convocadosTotal,
       anios3: convItem?.anios3 || 0,

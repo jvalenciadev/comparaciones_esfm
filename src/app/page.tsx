@@ -470,6 +470,7 @@ export default function Home() {
           {activeTab === "topes" && (
             <ControlTopesTab
               controlTopes={controlTopes}
+              tabla={tabla}
               filtroDepto={filtroDepto}
               filtroEsfm={filtroEsfm}
               categoriaPersonal={configConvocatoria.categoriaPersonal}
