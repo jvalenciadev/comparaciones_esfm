@@ -23,6 +23,9 @@ import {
   Building2,
   Info,
   Columns,
+  Check,
+  RotateCcw,
+  Palette,
 } from "lucide-react";
 
 interface Props {
@@ -48,6 +51,24 @@ type SortField =
 
 type Density = "compact" | "normal" | "large";
 
+export interface ColorCotejo {
+  id: string;
+  label: string;
+  hex: string;
+  bg: string;
+  border: string;
+  text: string;
+}
+
+export const PALETA_COLORES: ColorCotejo[] = [
+  { id: "emerald", label: "Verde", hex: "#10b981", bg: "rgba(16, 185, 129, 0.20)", border: "#10b981", text: "#6ee7b7" },
+  { id: "blue", label: "Azul", hex: "#3b82f6", bg: "rgba(59, 130, 246, 0.20)", border: "#3b82f6", text: "#93c5fd" },
+  { id: "amber", label: "Ámbar", hex: "#f59e0b", bg: "rgba(245, 158, 11, 0.20)", border: "#f59e0b", text: "#fde68a" },
+  { id: "purple", label: "Púrpura", hex: "#8b5cf6", bg: "rgba(139, 92, 246, 0.20)", border: "#8b5cf6", text: "#c4b5fd" },
+  { id: "pink", label: "Rosa", hex: "#ec4899", bg: "rgba(236, 72, 153, 0.20)", border: "#ec4899", text: "#fbcfe8" },
+  { id: "cyan", label: "Cian", hex: "#06b6d4", bg: "rgba(6, 182, 212, 0.20)", border: "#06b6d4", text: "#a5f3fc" },
+];
+
 export const ControlTopesTab: React.FC<Props> = ({
   controlTopes,
   convocatoriaRecords = [],
@@ -68,6 +89,16 @@ export const ControlTopesTab: React.FC<Props> = ({
   const [tabModal, setTabModal] = useState<"JUNTOS" | "CONVOCATORIA" | "SEP">("JUNTOS");
   const [modoSep, setModoSep] = useState<"AGRUPADO" | "DETALLE">("AGRUPADO");
   const [filtroModalTexto, setFiltroModalTexto] = useState<string>("");
+
+  // Estados para cotejo: tickear, separar por colores y ver faltantes
+  const [marcasConv, setMarcasConv] = useState<Record<string, { tick: boolean; colorId: string }>>({});
+  const [marcasSep, setMarcasSep] = useState<Record<string, { tick: boolean; colorId: string }>>({});
+  const [colorActivo, setColorActivo] = useState<string>("emerald");
+  const [filtroCotejo, setFiltroCotejo] = useState<"TODOS" | "FALTAN" | "TICKEADOS">("TODOS");
+
+  // Ordenamiento por color
+  const [sortConvColor, setSortConvColor] = useState<boolean>(false);
+  const [sortSepColor, setSortSepColor] = useState<boolean>(false);
 
   // Ordenamiento independiente para Convocatoria
   const [sortConvField, setSortConvField] = useState<string>("cargo");
@@ -121,6 +152,7 @@ export const ControlTopesTab: React.FC<Props> = ({
   };
 
   const handleSortConv = (field: string) => {
+    setSortConvColor(false); // desactivar color sort al usar columna
     if (sortConvField === field) {
       setSortConvOrder(sortConvOrder === "asc" ? "desc" : "asc");
     } else {
@@ -130,6 +162,7 @@ export const ControlTopesTab: React.FC<Props> = ({
   };
 
   const handleSortSep = (field: string) => {
+    setSortSepColor(false); // desactivar color sort al usar columna
     if (sortSepField === field) {
       setSortSepOrder(sortSepOrder === "asc" ? "desc" : "asc");
     } else {
@@ -210,18 +243,77 @@ export const ControlTopesTab: React.FC<Props> = ({
     });
   }, [modalEsfm, planillaSepRecords, categoriaPersonal]);
 
+  // Métodos para cotejo interactivo
+  const toggleTickConv = (key: string) => {
+    setMarcasConv((prev) => {
+      const actual = prev[key];
+      if (actual?.tick) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: { tick: true, colorId: colorActivo } };
+    });
+  };
+
+  const ciclarColorConv = (e: React.MouseEvent, key: string) => {
+    e.stopPropagation();
+    setMarcasConv((prev) => {
+      const actual = prev[key];
+      const actualColorId = actual?.colorId || colorActivo;
+      const idx = PALETA_COLORES.findIndex((c) => c.id === actualColorId);
+      const nextColor = PALETA_COLORES[(idx + 1) % PALETA_COLORES.length].id;
+      return { ...prev, [key]: { tick: true, colorId: nextColor } };
+    });
+  };
+
+  const toggleTickSep = (key: string) => {
+    setMarcasSep((prev) => {
+      const actual = prev[key];
+      if (actual?.tick) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: { tick: true, colorId: colorActivo } };
+    });
+  };
+
+  const ciclarColorSep = (e: React.MouseEvent, key: string) => {
+    e.stopPropagation();
+    setMarcasSep((prev) => {
+      const actual = prev[key];
+      const actualColorId = actual?.colorId || colorActivo;
+      const idx = PALETA_COLORES.findIndex((c) => c.id === actualColorId);
+      const nextColor = PALETA_COLORES[(idx + 1) % PALETA_COLORES.length].id;
+      return { ...prev, [key]: { tick: true, colorId: nextColor } };
+    });
+  };
+
+  const limpiarMarcas = () => {
+    setMarcasConv({});
+    setMarcasSep({});
+  };
+
+  const toggleSortAmbosColor = () => {
+    const activar = !(sortConvColor && sortSepColor);
+    setSortConvColor(activar);
+    setSortSepColor(activar);
+  };
+
   // Cargos SEP agrupados por denominación de cargo
   const cargosSepAgrupados = useMemo(() => {
-    const map = new Map<string, { cargo: string; descripcion: string; cantidad: number }>();
+    const map = new Map<string, { _key: string; cargo: string; descripcion: string; cantidad: number; detalle?: string }>();
     for (const r of cargosSep) {
       const c = r.cargo_raw || "SIN CARGO";
       const d = r.descripcion || "";
       const key = `${c}___${d}`;
       const item = map.get(key);
       if (!item) {
-        map.set(key, { cargo: c, descripcion: d, cantidad: 1 });
+        map.set(key, { _key: `agr_${key}`, cargo: c, descripcion: d, cantidad: 1, detalle: r.detalle });
       } else {
         item.cantidad += 1;
+        if (!item.detalle && r.detalle) item.detalle = r.detalle;
       }
     }
     return Array.from(map.values());
@@ -229,16 +321,50 @@ export const ControlTopesTab: React.FC<Props> = ({
 
   // Lista ordenada de Convocatoria Oficial
   const cargosConvocadosOrdenados = useMemo(() => {
-    let list = cargosConvocados.filter((r) => {
-      if (filtroModalTexto) {
-        const txt = filtroModalTexto.toLowerCase().trim();
+    let list = cargosConvocados.map((r, i) => ({
+      ...r,
+      _key: `conv_${r.cargo_raw || ""}_${r.descripcion || ""}_${r.esfm_key || ""}_${i}`,
+    }));
+
+    if (filtroModalTexto) {
+      const txt = filtroModalTexto.toLowerCase().trim();
+      list = list.filter((r) => {
         const mCargo = (r.cargo_raw || "").toLowerCase().includes(txt);
         const mDesc = (r.descripcion || "").toLowerCase().includes(txt);
         const mDet = (r.detalle || "").toLowerCase().includes(txt);
-        if (!mCargo && !mDesc && !mDet) return false;
-      }
-      return true;
-    });
+        return mCargo || mDesc || mDet;
+      });
+    }
+
+    if (filtroCotejo === "FALTAN") {
+      list = list.filter((r) => !marcasConv[r._key]?.tick);
+    } else if (filtroCotejo === "TICKEADOS") {
+      list = list.filter((r) => marcasConv[r._key]?.tick);
+    }
+
+    if (sortConvColor) {
+      // Ticked primero agrupados por color (orden de paleta), luego sin tick en orden de cargo
+      const colorOrder = PALETA_COLORES.map((c) => c.id);
+      list.sort((a, b) => {
+        const ma = marcasConv[a._key];
+        const mb = marcasConv[b._key];
+        const haA = !!ma?.tick;
+        const haB = !!mb?.tick;
+        if (haA && !haB) return -1; // ticked siempre antes
+        if (!haA && haB) return 1;
+        if (haA && haB) {
+          // Ambos tickeados: ordenar por color de paleta
+          const ia = colorOrder.indexOf(ma.colorId ?? "");
+          const ib = colorOrder.indexOf(mb.colorId ?? "");
+          if (ia !== ib) return ia - ib;
+        }
+        // Mismo estado o color: orden alfabético por cargo y especialidad
+        const compCargo = (a.cargo_raw || "").localeCompare(b.cargo_raw || "");
+        if (compCargo !== 0) return compCargo;
+        return (a.descripcion || "").localeCompare(b.descripcion || "");
+      });
+      return list;
+    }
 
     list.sort((a, b) => {
       let va: any = "";
@@ -270,20 +396,50 @@ export const ControlTopesTab: React.FC<Props> = ({
     });
 
     return list;
-  }, [cargosConvocados, filtroModalTexto, sortConvField, sortConvOrder]);
+  }, [cargosConvocados, filtroModalTexto, filtroCotejo, marcasConv, sortConvColor, sortConvField, sortConvOrder]);
 
   // Lista ordenada de Planilla SEP
   const cargosSepOrdenados = useMemo(() => {
     if (modoSep === "AGRUPADO") {
-      let list = cargosSepAgrupados.filter((r) => {
-        if (filtroModalTexto) {
-          const txt = filtroModalTexto.toLowerCase().trim();
+      let list = [...cargosSepAgrupados];
+
+      if (filtroModalTexto) {
+        const txt = filtroModalTexto.toLowerCase().trim();
+        list = list.filter((r) => {
           const mCargo = (r.cargo || "").toLowerCase().includes(txt);
           const mDesc = (r.descripcion || "").toLowerCase().includes(txt);
-          if (!mCargo && !mDesc) return false;
-        }
-        return true;
-      });
+          return mCargo || mDesc;
+        });
+      }
+
+      if (filtroCotejo === "FALTAN") {
+        list = list.filter((r) => !marcasSep[r._key]?.tick);
+      } else if (filtroCotejo === "TICKEADOS") {
+        list = list.filter((r) => marcasSep[r._key]?.tick);
+      }
+
+      if (sortSepColor) {
+        const colorOrder = PALETA_COLORES.map((c) => c.id);
+        list.sort((a, b) => {
+          const ma = marcasSep[a._key];
+          const mb = marcasSep[b._key];
+          const haA = !!ma?.tick;
+          const haB = !!mb?.tick;
+          if (haA && !haB) return -1; // ticked siempre antes
+          if (!haA && haB) return 1;
+          if (haA && haB) {
+            // Ambos tickeados: ordenar por color de paleta en la misma secuencia exacta
+            const ia = colorOrder.indexOf(ma.colorId ?? "");
+            const ib = colorOrder.indexOf(mb.colorId ?? "");
+            if (ia !== ib) return ia - ib;
+          }
+          // Mismo estado o color: orden alfabético por cargo y descripción
+          const compCargo = (a.cargo || "").localeCompare(b.cargo || "");
+          if (compCargo !== 0) return compCargo;
+          return (a.descripcion || "").localeCompare(b.descripcion || "");
+        });
+        return list;
+      }
 
       list.sort((a, b) => {
         let va: any = "";
@@ -306,19 +462,55 @@ export const ControlTopesTab: React.FC<Props> = ({
       });
       return list;
     } else {
-      let list = cargosSep.filter((r) => {
-        if (filtroModalTexto) {
-          const txt = filtroModalTexto.toLowerCase().trim();
-          const mCargo = (r.cargo_raw || "").toLowerCase().includes(txt);
+      let list = cargosSep.map((r, i) => ({
+        _key: `sep_det_${r.cargo_raw || ""}_${r.descripcion || ""}_${r.esfm_key || ""}_${i}`,
+        cargo: r.cargo_raw || "SIN CARGO",
+        descripcion: r.descripcion || "",
+        cantidad: 1,
+        detalle: r.detalle,
+      }));
+
+      if (filtroModalTexto) {
+        const txt = filtroModalTexto.toLowerCase().trim();
+        list = list.filter((r) => {
+          const mCargo = (r.cargo || "").toLowerCase().includes(txt);
           const mDesc = (r.descripcion || "").toLowerCase().includes(txt);
-          if (!mCargo && !mDesc) return false;
-        }
-        return true;
-      });
+          return mCargo || mDesc;
+        });
+      }
+
+      if (filtroCotejo === "FALTAN") {
+        list = list.filter((r) => !marcasSep[r._key]?.tick);
+      } else if (filtroCotejo === "TICKEADOS") {
+        list = list.filter((r) => marcasSep[r._key]?.tick);
+      }
+
+      if (sortSepColor) {
+        const colorOrder = PALETA_COLORES.map((c) => c.id);
+        list.sort((a, b) => {
+          const ma = marcasSep[a._key];
+          const mb = marcasSep[b._key];
+          const haA = !!ma?.tick;
+          const haB = !!mb?.tick;
+          if (haA && !haB) return -1; // ticked siempre antes
+          if (!haA && haB) return 1;
+          if (haA && haB) {
+            // Ambos tickeados: ordenar por color de paleta en la misma secuencia exacta
+            const ia = colorOrder.indexOf(ma.colorId ?? "");
+            const ib = colorOrder.indexOf(mb.colorId ?? "");
+            if (ia !== ib) return ia - ib;
+          }
+          // Mismo estado o color: orden alfabético por cargo y descripción
+          const compCargo = (a.cargo || "").localeCompare(b.cargo || "");
+          if (compCargo !== 0) return compCargo;
+          return (a.descripcion || "").localeCompare(b.descripcion || "");
+        });
+        return list;
+      }
 
       list.sort((a, b) => {
-        let va: any = a.cargo_raw || "";
-        let vb: any = b.cargo_raw || "";
+        let va: any = a.cargo || "";
+        let vb: any = b.cargo || "";
         if (sortSepField === "descripcion") {
           va = a.descripcion || "";
           vb = b.descripcion || "";
@@ -326,14 +518,27 @@ export const ControlTopesTab: React.FC<Props> = ({
         const cmp = String(va).localeCompare(String(vb));
         return sortSepOrder === "asc" ? cmp : -cmp;
       });
-      return list.map((r, i) => ({
-        cargo: r.cargo_raw || "SIN CARGO",
-        descripcion: r.descripcion || "",
-        cantidad: 1,
-        detalle: r.detalle,
-      }));
+      return list;
     }
-  }, [cargosSep, cargosSepAgrupados, modoSep, filtroModalTexto, sortSepField, sortSepOrder]);
+  }, [cargosSep, cargosSepAgrupados, modoSep, filtroModalTexto, filtroCotejo, marcasSep, sortSepColor, sortSepField, sortSepOrder]);
+
+  // Conteos de ítems marcados vs totales
+  const totalConvMarcados = useMemo(() => {
+    return cargosConvocados.filter((r, i) => {
+      const key = `conv_${r.cargo_raw || ""}_${r.descripcion || ""}_${r.esfm_key || ""}_${i}`;
+      return marcasConv[key]?.tick;
+    }).length;
+  }, [cargosConvocados, marcasConv]);
+
+  const totalSepMarcados = useMemo(() => {
+    if (modoSep === "AGRUPADO") {
+      return cargosSepAgrupados.filter((r) => marcasSep[r._key]?.tick).length;
+    }
+    return cargosSep.filter((r, i) => {
+      const key = `sep_det_${r.cargo_raw || ""}_${r.descripcion || ""}_${r.esfm_key || ""}_${i}`;
+      return marcasSep[key]?.tick;
+    }).length;
+  }, [modoSep, cargosSepAgrupados, cargosSep, marcasSep]);
 
   // Variables de densidad / tamaño
   const configDensidad = {
@@ -963,6 +1168,169 @@ export const ControlTopesTab: React.FC<Props> = ({
               </div>
             </div>
 
+            {/* Barra de Herramientas de Cotejo Dinámico, Filtro de Faltantes y Colores */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "10px",
+                padding: "8px 22px",
+                background: "rgba(30, 41, 59, 0.5)",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.07)",
+                fontSize: "0.78rem",
+              }}
+            >
+              {/* Filtro de Cotejo y Faltantes */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                <span style={{ color: "#94a3b8", fontWeight: 600, marginRight: "4px" }}>Cotejo:</span>
+                <button
+                  onClick={() => setFiltroCotejo("TODOS")}
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    border: "1px solid",
+                    background: filtroCotejo === "TODOS" ? "rgba(255,255,255,0.15)" : "transparent",
+                    borderColor: filtroCotejo === "TODOS" ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)",
+                    color: filtroCotejo === "TODOS" ? "#ffffff" : "#94a3b8",
+                  }}
+                >
+                  Todos ({cargosConvocados.length} Conv / {modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length} SEP)
+                </button>
+                <button
+                  onClick={() => setFiltroCotejo("FALTAN")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "3px 10px",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    border: "1px solid",
+                    background: filtroCotejo === "FALTAN" ? "rgba(245, 158, 11, 0.25)" : "rgba(245, 158, 11, 0.08)",
+                    borderColor: filtroCotejo === "FALTAN" ? "rgba(245, 158, 11, 0.6)" : "rgba(245, 158, 11, 0.2)",
+                    color: "#fbbf24",
+                  }}
+                  title="Oculta los ya tickeados para ver únicamente los que aún faltan emparejar"
+                >
+                  <AlertTriangle size={13} />
+                  Faltan Identificar ({cargosConvocados.length - totalConvMarcados} en Conv | {(modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) - totalSepMarcados} en SEP)
+                </button>
+                <button
+                  onClick={() => setFiltroCotejo("TICKEADOS")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "3px 10px",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    border: "1px solid",
+                    background: filtroCotejo === "TICKEADOS" ? "rgba(16, 185, 129, 0.25)" : "rgba(16, 185, 129, 0.08)",
+                    borderColor: filtroCotejo === "TICKEADOS" ? "rgba(16, 185, 129, 0.6)" : "rgba(16, 185, 129, 0.2)",
+                    color: "#34d399",
+                  }}
+                >
+                  <Check size={13} />
+                  Tickeados ({totalConvMarcados + totalSepMarcados})
+                </button>
+              </div>
+
+              {/* Selector de Paleta de Colores de Cotejo */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ color: "#94a3b8", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  <Palette size={13} />
+                  Color para tickear:
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  {PALETA_COLORES.map((c) => {
+                    const esActivo = colorActivo === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => setColorActivo(c.id)}
+                        title={`Asignar color ${c.label} a las filas que tickees`}
+                        style={{
+                          width: "22px",
+                          height: "22px",
+                          borderRadius: "50%",
+                          background: c.hex,
+                          border: esActivo ? "2px solid #ffffff" : "2px solid transparent",
+                          boxShadow: esActivo ? `0 0 10px ${c.hex}` : "none",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 0,
+                          transition: "transform 0.15s ease",
+                          transform: esActivo ? "scale(1.15)" : "scale(1)",
+                        }}
+                      >
+                        {esActivo && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Botón Ordenar Ambos Lados por Color */}
+                <button
+                  onClick={toggleSortAmbosColor}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    marginLeft: "10px",
+                    padding: "4px 10px",
+                    borderRadius: "5px",
+                    fontSize: "0.74rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: sortConvColor && sortSepColor ? "rgba(99, 102, 241, 0.35)" : "rgba(255, 255, 255, 0.06)",
+                    borderColor: sortConvColor && sortSepColor ? "#818cf8" : "rgba(255, 255, 255, 0.15)",
+                    color: sortConvColor && sortSepColor ? "#e0e7ff" : "#cbd5e1",
+                  }}
+                  title="Alinear y ordenar ambos paneles (Convocatoria y Planilla SEP) con la misma secuencia de colores"
+                >
+                  <Palette size={13} color={sortConvColor && sortSepColor ? "#a5b4fc" : "#94a3b8"} />
+                  {sortConvColor && sortSepColor ? "✓ Ambos ordenados por color" : "Ordenar ambos lados por color"}
+                </button>
+
+                {/* Botón Reiniciar Marcas */}
+                {(totalConvMarcados > 0 || totalSepMarcados > 0) && (
+                  <button
+                    onClick={limpiarMarcas}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      marginLeft: "6px",
+                      padding: "3px 8px",
+                      borderRadius: "4px",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      background: "rgba(239, 68, 68, 0.15)",
+                      color: "#f87171",
+                      fontSize: "0.72rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                    title="Desmarcar todas las filas de esta ESFM"
+                  >
+                    <RotateCcw size={12} />
+                    Reiniciar
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* CUERPO DEL MODAL */}
             <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "14px 20px" }}>
               {tabModal === "JUNTOS" ? (
@@ -995,10 +1363,47 @@ export const ControlTopesTab: React.FC<Props> = ({
                         <span style={{ fontWeight: 700, color: "#93c5fd", fontSize: "0.85rem" }}>
                           Cargos Convocatoria Oficial ({cargosConvocadosOrdenados.length})
                         </span>
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            padding: "1px 6px",
+                            borderRadius: "4px",
+                            background: totalConvMarcados === cargosConvocados.length ? "rgba(16, 185, 129, 0.25)" : "rgba(59, 130, 246, 0.2)",
+                            color: totalConvMarcados === cargosConvocados.length ? "#34d399" : "#93c5fd",
+                            border: "1px solid",
+                            borderColor: totalConvMarcados === cargosConvocados.length ? "rgba(16, 185, 129, 0.5)" : "rgba(59, 130, 246, 0.4)",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ✓ {totalConvMarcados} / {cargosConvocados.length} tickeados
+                        </span>
                       </div>
-                      <span style={{ fontSize: "0.76rem", color: "#60a5fa", fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>
-                        {modalEsfm.convocadosTotal} plazas totales
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <button
+                          onClick={toggleSortAmbosColor}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            padding: "3px 8px",
+                            borderRadius: "5px",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            border: "1px solid",
+                            background: sortConvColor && sortSepColor ? "rgba(99, 102, 241, 0.3)" : "transparent",
+                            borderColor: sortConvColor && sortSepColor ? "#818cf8" : "rgba(255,255,255,0.1)",
+                            color: sortConvColor && sortSepColor ? "#c7d2fe" : "#64748b",
+                          }}
+                          title="Ordenar ambos lados por color de cotejo"
+                        >
+                          <Palette size={12} />
+                          Por color
+                        </button>
+                        <span style={{ fontSize: "0.76rem", color: "#60a5fa", fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>
+                          {modalEsfm.convocadosTotal} plazas totales
+                        </span>
+                      </div>
                     </div>
 
                     {/* Tabla Convocatoria Ordenable */}
@@ -1006,7 +1411,10 @@ export const ControlTopesTab: React.FC<Props> = ({
                       <table className="custom-table" style={{ fontSize: "0.78rem", margin: 0 }}>
                         <thead style={{ position: "sticky", top: 0, zIndex: 5, background: "#111827" }}>
                           <tr>
-                            <th style={{ width: "32px", textAlign: "center", padding: "8px 6px" }}>#</th>
+                            <th style={{ width: "44px", textAlign: "center", padding: "8px 4px" }} title="Tickear para marcar y agrupar por color">
+                              ✓
+                            </th>
+                            <th style={{ width: "28px", textAlign: "center", padding: "8px 4px" }}>#</th>
                             <th
                               onClick={() => handleSortConv("cargo")}
                               style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
@@ -1037,7 +1445,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                             </th>
                             <th
                               onClick={() => handleSortConv("total")}
-                              style={{ textAlign: "right", width: "70px", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                              style={{ textAlign: "right", width: "65px", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
                               title="Clic para ordenar por Plazas"
                             >
                               <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "flex-end" }}>
@@ -1054,8 +1462,10 @@ export const ControlTopesTab: React.FC<Props> = ({
                         <tbody>
                           {cargosConvocadosOrdenados.length === 0 ? (
                             <tr>
-                              <td colSpan={4} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
-                                No se encontraron cargos convocados.
+                              <td colSpan={5} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                                {filtroCotejo === "FALTAN"
+                                  ? "¡Excelente! Ya has tickeado todos los cargos convocados."
+                                  : "No se encontraron cargos con el filtro aplicado."}
                               </td>
                             </tr>
                           ) : (
@@ -1065,20 +1475,85 @@ export const ControlTopesTab: React.FC<Props> = ({
                               const a1 = r.anios_1 || 0;
                               const tot = (a3 + a2 + a1) || 1;
                               const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD");
+                              const marca = marcasConv[r._key];
+                              const isTick = !!marca?.tick;
+                              const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
 
                               return (
-                                <tr key={i}>
-                                  <td style={{ textAlign: "center", color: "#64748b", padding: "7px 6px" }}>{i + 1}</td>
-                                  <td style={{ fontWeight: 600, color: "#f1f5f9", padding: "7px 10px" }}>
+                                <tr
+                                  key={r._key}
+                                  style={{
+                                    background: isTick ? colorObj?.bg : undefined,
+                                    borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                                    transition: "background 0.15s ease",
+                                  }}
+                                >
+                                  {/* Casilla Checkbox + Color Selector */}
+                                  <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleTickConv(r._key)}
+                                        style={{
+                                          width: "18px",
+                                          height: "18px",
+                                          borderRadius: "4px",
+                                          border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                          background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          cursor: "pointer",
+                                          padding: 0,
+                                        }}
+                                        title={isTick ? "Desmarcar cargo" : "Tickear cargo con el color activo"}
+                                      >
+                                        {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                      </button>
+                                      {isTick && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => ciclarColorConv(e, r._key)}
+                                          style={{
+                                            width: "12px",
+                                            height: "12px",
+                                            borderRadius: "50%",
+                                            background: colorObj?.hex,
+                                            border: "1px solid rgba(255,255,255,0.7)",
+                                            cursor: "pointer",
+                                            padding: 0,
+                                          }}
+                                          title={`Color: ${colorObj?.label}. Clic para cambiar de color`}
+                                        />
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ textAlign: "center", color: "#64748b", padding: "7px 4px" }}>{i + 1}</td>
+                                  <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9", padding: "7px 10px" }}>
                                     {r.cargo_raw}
+                                    {isTick && (
+                                      <span
+                                        style={{
+                                          marginLeft: "6px",
+                                          fontSize: "0.68em",
+                                          color: colorObj?.text,
+                                          border: `1px solid ${colorObj?.border}`,
+                                          borderRadius: "3px",
+                                          padding: "1px 4px",
+                                          background: "rgba(0,0,0,0.25)",
+                                        }}
+                                      >
+                                        {colorObj?.label}
+                                      </span>
+                                    )}
                                     {esInam && (
                                       <span style={{ marginLeft: "5px", fontSize: "0.68em", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.4)", borderRadius: "3px", padding: "1px 4px" }}>
-                                        Inamovible
+                                        Inamobilidad
                                       </span>
                                     )}
                                   </td>
                                   <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.descripcion || "—"}</td>
-                                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#93c5fd", padding: "7px 10px" }}>
+                                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#93c5fd", padding: "7px 10px" }}>
                                     {tot}
                                     {(a3 > 0 || a2 > 0 || a1 > 0) && (
                                       <span style={{ fontSize: "0.72em", color: "#64748b", display: "block", fontWeight: 400 }}>
@@ -1122,7 +1597,21 @@ export const ControlTopesTab: React.FC<Props> = ({
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <Layers size={16} color="#818cf8" />
                         <span style={{ fontWeight: 700, color: "#c7d2fe", fontSize: "0.85rem" }}>
-                          Ítems Planilla SEP ({cargosSep.length})
+                          Ítems Planilla SEP ({cargosSepOrdenados.length})
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            padding: "1px 6px",
+                            borderRadius: "4px",
+                            background: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "rgba(16, 185, 129, 0.25)" : "rgba(129, 140, 248, 0.2)",
+                            color: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "#34d399" : "#c7d2fe",
+                            border: "1px solid",
+                            borderColor: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "rgba(16, 185, 129, 0.5)" : "rgba(129, 140, 248, 0.4)",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ✓ {totalSepMarcados} / {modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length} tickeados
                         </span>
                       </div>
 
@@ -1163,6 +1652,27 @@ export const ControlTopesTab: React.FC<Props> = ({
                         <span style={{ fontSize: "0.76rem", color: "#a5b4fc", fontWeight: 700, fontFamily: "var(--font-mono, monospace)", marginLeft: "4px" }}>
                           {modalEsfm.topeSEP} ítems
                         </span>
+                        <button
+                          onClick={toggleSortAmbosColor}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            padding: "3px 8px",
+                            borderRadius: "5px",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            border: "1px solid",
+                            background: sortConvColor && sortSepColor ? "rgba(99, 102, 241, 0.3)" : "transparent",
+                            borderColor: sortConvColor && sortSepColor ? "#818cf8" : "rgba(255,255,255,0.1)",
+                            color: sortConvColor && sortSepColor ? "#c7d2fe" : "#64748b",
+                          }}
+                          title="Ordenar ambos lados por color de cotejo"
+                        >
+                          <Palette size={12} />
+                          Por color
+                        </button>
                       </div>
                     </div>
 
@@ -1171,7 +1681,10 @@ export const ControlTopesTab: React.FC<Props> = ({
                       <table className="custom-table" style={{ fontSize: "0.78rem", margin: 0 }}>
                         <thead style={{ position: "sticky", top: 0, zIndex: 5, background: "#111827" }}>
                           <tr>
-                            <th style={{ width: "32px", textAlign: "center", padding: "8px 6px" }}>#</th>
+                            <th style={{ width: "44px", textAlign: "center", padding: "8px 4px" }} title="Tickear para marcar y agrupar por color">
+                              ✓
+                            </th>
+                            <th style={{ width: "28px", textAlign: "center", padding: "8px 4px" }}>#</th>
                             <th
                               onClick={() => handleSortSep("cargo")}
                               style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
@@ -1202,7 +1715,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                             </th>
                             <th
                               onClick={() => handleSortSep("cantidad")}
-                              style={{ textAlign: "right", width: "70px", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                              style={{ textAlign: "right", width: "65px", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
                               title="Clic para ordenar por Cantidad de Ítems"
                             >
                               <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "flex-end" }}>
@@ -1219,21 +1732,111 @@ export const ControlTopesTab: React.FC<Props> = ({
                         <tbody>
                           {cargosSepOrdenados.length === 0 ? (
                             <tr>
-                              <td colSpan={4} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
-                                No se encontraron ítems en planilla SEP.
+                              <td colSpan={5} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                                {filtroCotejo === "FALTAN"
+                                  ? "¡Excelente! Ya has tickeado todos los ítems de Planilla SEP."
+                                  : "No se encontraron ítems con el filtro aplicado."}
                               </td>
                             </tr>
                           ) : (
-                            cargosSepOrdenados.map((r, i) => (
-                              <tr key={i}>
-                                <td style={{ textAlign: "center", color: "#64748b", padding: "7px 6px" }}>{i + 1}</td>
-                                <td style={{ fontWeight: 600, color: "#f1f5f9", padding: "7px 10px" }}>{r.cargo}</td>
-                                <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.descripcion || "—"}</td>
-                                <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#a5b4fc", padding: "7px 10px" }}>
-                                  {r.cantidad}
-                                </td>
-                              </tr>
-                            ))
+                            cargosSepOrdenados.map((r, i) => {
+                              const marca = marcasSep[r._key];
+                              const isTick = !!marca?.tick;
+                              const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
+
+                              return (
+                                <tr
+                                  key={r._key}
+                                  style={{
+                                    background: isTick ? colorObj?.bg : undefined,
+                                    borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                                    transition: "background 0.15s ease",
+                                  }}
+                                >
+                                  {/* Casilla Checkbox + Color Selector */}
+                                  <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleTickSep(r._key)}
+                                        style={{
+                                          width: "18px",
+                                          height: "18px",
+                                          borderRadius: "4px",
+                                          border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                          background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          cursor: "pointer",
+                                          padding: 0,
+                                        }}
+                                        title={isTick ? "Desmarcar ítem" : "Tickear ítem con el color activo"}
+                                      >
+                                        {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                      </button>
+                                      {isTick && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => ciclarColorSep(e, r._key)}
+                                          style={{
+                                            width: "12px",
+                                            height: "12px",
+                                            borderRadius: "50%",
+                                            background: colorObj?.hex,
+                                            border: "1px solid rgba(255,255,255,0.7)",
+                                            cursor: "pointer",
+                                            padding: 0,
+                                          }}
+                                          title={`Color: ${colorObj?.label}. Clic para cambiar de color`}
+                                        />
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ textAlign: "center", color: "#64748b", padding: "7px 4px" }}>{i + 1}</td>
+                                  <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9", padding: "7px 10px" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span>{r.cargo}</span>
+                                        {isTick && (
+                                          <span
+                                            style={{
+                                              fontSize: "0.68em",
+                                              color: colorObj?.text,
+                                              border: `1px solid ${colorObj?.border}`,
+                                              borderRadius: "3px",
+                                              padding: "1px 4px",
+                                              background: "rgba(0,0,0,0.25)",
+                                            }}
+                                          >
+                                            {colorObj?.label}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {r.detalle && (
+                                        <div
+                                          style={{
+                                            fontSize: "0.70rem",
+                                            color: "#94a3b8",
+                                            background: "rgba(255, 255, 255, 0.04)",
+                                            border: "1px solid rgba(255, 255, 255, 0.08)",
+                                            borderRadius: "3px",
+                                            padding: "1px 5px",
+                                            width: "fit-content",
+                                          }}
+                                        >
+                                          📌 {r.detalle}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.descripcion || "—"}</td>
+                                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#a5b4fc", padding: "7px 10px" }}>
+                                    {r.cantidad}
+                                  </td>
+                                </tr>
+                              );
+                            })
                           )}
                         </tbody>
                       </table>
@@ -1246,6 +1849,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                   <table className="custom-table" style={{ fontSize: "0.82rem", margin: 0 }}>
                     <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
                       <tr>
+                        <th style={{ width: "44px", textAlign: "center", padding: "10px 4px" }}>✓</th>
                         <th style={{ width: "38px", textAlign: "center", padding: "10px 8px" }}>#</th>
                         <th onClick={() => handleSortConv("cargo")} style={{ cursor: "pointer", userSelect: "none" }}>
                           Cargo Convocado {sortConvField === "cargo" && (sortConvOrder === "asc" ? "▲" : "▼")}
@@ -1269,26 +1873,89 @@ export const ControlTopesTab: React.FC<Props> = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {cargosConvocadosOrdenados.map((r, i) => {
-                        const a3 = r.anios_3 || 0;
-                        const a2 = r.anios_2 || 0;
-                        const a1 = r.anios_1 || 0;
-                        const tot = a3 + a2 + a1 || 1;
-                        const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD");
+                      {cargosConvocadosOrdenados.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                            {filtroCotejo === "FALTAN"
+                              ? "¡Excelente! Ya has tickeado todos los cargos convocados."
+                              : "No se encontraron cargos con el filtro aplicado."}
+                          </td>
+                        </tr>
+                      ) : (
+                        cargosConvocadosOrdenados.map((r, i) => {
+                          const a3 = r.anios_3 || 0;
+                          const a2 = r.anios_2 || 0;
+                          const a1 = r.anios_1 || 0;
+                          const tot = a3 + a2 + a1 || 1;
+                          const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD");
+                          const marca = marcasConv[r._key];
+                          const isTick = !!marca?.tick;
+                          const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
 
-                        return (
-                          <tr key={i}>
-                            <td style={{ textAlign: "center", color: "#64748b" }}>{i + 1}</td>
-                            <td style={{ fontWeight: 600, color: "#f1f5f9" }}>{r.cargo_raw}</td>
-                            <td style={{ color: "#cbd5e1" }}>{r.descripcion || "—"}</td>
-                            <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a3 > 0 ? "#93c5fd" : "#64748b" }}>{a3 > 0 ? a3 : "—"}</td>
-                            <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a2 > 0 ? "#fde68a" : "#64748b" }}>{a2 > 0 ? a2 : "—"}</td>
-                            <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a1 > 0 ? "#c4b5fd" : "#64748b" }}>{a1 > 0 ? a1 : "—"}</td>
-                            <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#ffffff" }}>{tot}</td>
-                            <td style={{ fontSize: "0.75rem", color: esInam ? "#f59e0b" : "#94a3b8" }}>{r.detalle || "—"}</td>
-                          </tr>
-                        );
-                      })}
+                          return (
+                            <tr
+                              key={r._key}
+                              style={{
+                                background: isTick ? colorObj?.bg : undefined,
+                                borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                              }}
+                            >
+                              <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleTickConv(r._key)}
+                                    style={{
+                                      width: "18px",
+                                      height: "18px",
+                                      borderRadius: "4px",
+                                      border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                      background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      cursor: "pointer",
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                  </button>
+                                  {isTick && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => ciclarColorConv(e, r._key)}
+                                      style={{
+                                        width: "12px",
+                                        height: "12px",
+                                        borderRadius: "50%",
+                                        background: colorObj?.hex,
+                                        border: "1px solid rgba(255,255,255,0.7)",
+                                        cursor: "pointer",
+                                        padding: 0,
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center", color: "#64748b" }}>{i + 1}</td>
+                              <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9" }}>
+                                {r.cargo_raw}
+                                {isTick && (
+                                  <span style={{ marginLeft: "6px", fontSize: "0.68em", color: colorObj?.text, border: `1px solid ${colorObj?.border}`, borderRadius: "3px", padding: "1px 4px" }}>
+                                    {colorObj?.label}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ color: "#cbd5e1" }}>{r.descripcion || "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a3 > 0 ? "#93c5fd" : "#64748b" }}>{a3 > 0 ? a3 : "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a2 > 0 ? "#fde68a" : "#64748b" }}>{a2 > 0 ? a2 : "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a1 > 0 ? "#c4b5fd" : "#64748b" }}>{a1 > 0 ? a1 : "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#ffffff" }}>{tot}</td>
+                              <td style={{ fontSize: "0.75rem", color: esInam ? "#f59e0b" : "#94a3b8" }}>{r.detalle || "—"}</td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1298,27 +1965,96 @@ export const ControlTopesTab: React.FC<Props> = ({
                   <table className="custom-table" style={{ fontSize: "0.82rem", margin: 0 }}>
                     <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
                       <tr>
+                        <th style={{ width: "44px", textAlign: "center", padding: "10px 4px" }}>✓</th>
                         <th style={{ width: "38px", textAlign: "center", padding: "10px 8px" }}>#</th>
                         <th onClick={() => handleSortSep("cargo")} style={{ cursor: "pointer", userSelect: "none" }}>
-                          Cargo en Planilla SEP {sortSepField === "cargo" && (sortSepOrder === "asc" ? "▲" : "▼")}
+                          Cargo en Planilla SEP {sortSepField === "cargo" && (sortConvOrder === "asc" ? "▲" : "▼")}
                         </th>
                         <th onClick={() => handleSortSep("descripcion")} style={{ cursor: "pointer", userSelect: "none" }}>
-                          Descripción {sortSepField === "descripcion" && (sortSepOrder === "asc" ? "▲" : "▼")}
+                          Descripción {sortSepField === "descripcion" && (sortConvOrder === "asc" ? "▲" : "▼")}
                         </th>
                         <th onClick={() => handleSortSep("cantidad")} style={{ textAlign: "right", width: "110px", cursor: "pointer", userSelect: "none" }}>
-                          Ítems {sortSepField === "cantidad" && (sortSepOrder === "asc" ? "▲" : "▼")}
+                          Ítems {sortSepField === "cantidad" && (sortConvOrder === "asc" ? "▲" : "▼")}
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {cargosSepOrdenados.map((r, i) => (
-                        <tr key={i}>
-                          <td style={{ textAlign: "center", color: "#64748b" }}>{i + 1}</td>
-                          <td style={{ fontWeight: 600, color: "#f1f5f9" }}>{r.cargo}</td>
-                          <td style={{ color: "#cbd5e1" }}>{r.descripcion || "—"}</td>
-                          <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#a5b4fc" }}>{r.cantidad}</td>
+                      {cargosSepOrdenados.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                            {filtroCotejo === "FALTAN"
+                              ? "¡Excelente! Ya has tickeado todos los ítems de Planilla SEP."
+                              : "No se encontraron ítems con el filtro aplicado."}
+                          </td>
                         </tr>
-                      ))}
+                      ) : (
+                        cargosSepOrdenados.map((r, i) => {
+                          const marca = marcasSep[r._key];
+                          const isTick = !!marca?.tick;
+                          const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
+
+                          return (
+                            <tr
+                              key={r._key}
+                              style={{
+                                background: isTick ? colorObj?.bg : undefined,
+                                borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                              }}
+                            >
+                              <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleTickSep(r._key)}
+                                    style={{
+                                      width: "18px",
+                                      height: "18px",
+                                      borderRadius: "4px",
+                                      border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                      background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      cursor: "pointer",
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                  </button>
+                                  {isTick && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => ciclarColorSep(e, r._key)}
+                                      style={{
+                                        width: "12px",
+                                        height: "12px",
+                                        borderRadius: "50%",
+                                        background: colorObj?.hex,
+                                        border: "1px solid rgba(255,255,255,0.7)",
+                                        cursor: "pointer",
+                                        padding: 0,
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center", color: "#64748b" }}>{i + 1}</td>
+                              <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9" }}>
+                                {r.cargo}
+                                {isTick && (
+                                  <span style={{ marginLeft: "6px", fontSize: "0.68em", color: colorObj?.text, border: `1px solid ${colorObj?.border}`, borderRadius: "3px", padding: "1px 4px" }}>
+                                    {colorObj?.label}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ color: "#cbd5e1" }}>{r.descripcion || "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#a5b4fc" }}>
+                                {r.cantidad}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
