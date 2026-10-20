@@ -131,7 +131,7 @@ export function cargarArchivoConAnios(
   const colDep = colFuzzy(columns, ["departamento", "depto", "dpto"]);
   const colEsfm = colFuzzy(columns, ["esfm", "esfm/ua", "ua", "nom_ins", "institucion"]);
   const colCargo = colFuzzy(columns, ["cargo", "nom_cargo"]);
-  const colDesc = colFuzzy(columns, ["descripcion_cargo", "descripcion", "descripción", "desc"]);
+  const colDesc = colFuzzy(columns, ["descripcion_cargo", "descripcion de cargo", "descripcion", "descripción", "desc"]);
   const col3a = colFuzzy(columns, ["3_anos", "3 años", "3anos", "tres_anos", "3_a"]);
   const col2a = colFuzzy(columns, ["2_anos", "2 años", "2anos", "dos_anos", "2_a"]);
 

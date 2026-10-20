@@ -30,6 +30,7 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
   const [tipoFiltro, setTipoFiltro] = useState<
     "TODOS" | "INAMOVILIDAD" | "INCREMENTO" | "QUITA_PCD" | "COMPULSA"
   >("TODOS");
+  const [filtroPersonal, setFiltroPersonal] = useState<"TODOS" | "DOCENTE" | "ADMINISTRATIVO">("TODOS");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Extraer todas las filas con DETALLE o plazas de 1 año (Compulsa)
@@ -69,6 +70,9 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
         badgeClass = "badge-blue";
       }
 
+      const esDoc = r.categoria === "DOCENTE" || (r.cargo_raw || "").includes("CATEDRATICO") || (r.cargo_raw || "").includes("DOCENTE");
+      const estamento: "DOCENTE" | "ADMINISTRATIVO" = esDoc ? "DOCENTE" : "ADMINISTRATIVO";
+
       return {
         departamento: r.departamento,
         esfm: r.esfm_raw,
@@ -80,6 +84,7 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
         tipo,
         clasificacion,
         badgeClass,
+        estamento,
         detalle: r.detalle || (r.anios_1 ? "PLAZA DE 1 AÑO (COMPULSA TEMPORAL)" : "—"),
       };
     });
@@ -118,12 +123,14 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
     .reduce((acc, r) => acc + (r.anios_1 ?? 0), 0);
 
 
-  // Filtrado reactivo por chips, departamento, ESFM y búsqueda
+  // Filtrado reactivo por chips, departamento, ESFM, estamento y búsqueda
   const filtrados = useMemo(() => {
     return filasClasificadas.filter((r) => {
       if (filtroDepto && r.departamento !== filtroDepto) return false;
       if (filtroEsfm && r.esfm !== filtroEsfm) return false;
       if (tipoFiltro !== "TODOS" && r.tipo !== tipoFiltro) return false;
+      if (filtroPersonal === "DOCENTE" && r.estamento !== "DOCENTE") return false;
+      if (filtroPersonal === "ADMINISTRATIVO" && r.estamento !== "ADMINISTRATIVO") return false;
 
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
@@ -136,7 +143,7 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
 
       return true;
     });
-  }, [filasClasificadas, filtroDepto, filtroEsfm, tipoFiltro, searchTerm]);
+  }, [filasClasificadas, filtroDepto, filtroEsfm, tipoFiltro, filtroPersonal, searchTerm]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -176,12 +183,47 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             {totalInamovilidad} <span style={{ fontSize: "0.9rem", color: "#fbbf24" }}>filas totales</span>
           </div>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
-            <span className="badge badge-yellow" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-              <GraduationCap size={12} /> Docente: {totalInamovilidadDocente}
-            </span>
-            <span className="badge" style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "rgba(245,158,11,0.15)", color: "#d97706", border: "1px solid rgba(245,158,11,0.3)" }}>
-              <Briefcase size={12} /> Adm: {totalInamovilidadAdm}
-            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setTipoFiltro("INAMOVILIDAD");
+                setFiltroPersonal(filtroPersonal === "DOCENTE" ? "TODOS" : "DOCENTE");
+              }}
+              className="badge badge-yellow"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                cursor: "pointer",
+                border: filtroPersonal === "DOCENTE" ? "1.5px solid #ffffff" : "1px solid rgba(245,158,11,0.4)",
+                background: filtroPersonal === "DOCENTE" ? "rgba(245,158,11,0.4)" : undefined,
+                fontWeight: 700,
+              }}
+              title="Filtrar solo Inamovilidades de Docentes"
+            >
+              <GraduationCap size={12} /> Docente: {totalInamovilidadDocente} {filtroPersonal === "DOCENTE" ? "✓" : ""}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setTipoFiltro("INAMOVILIDAD");
+                setFiltroPersonal(filtroPersonal === "ADMINISTRATIVO" ? "TODOS" : "ADMINISTRATIVO");
+              }}
+              className="badge"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                background: filtroPersonal === "ADMINISTRATIVO" ? "rgba(245,158,11,0.3)" : "rgba(245,158,11,0.15)",
+                color: "#fbbf24",
+                border: filtroPersonal === "ADMINISTRATIVO" ? "1.5px solid #ffffff" : "1px solid rgba(245,158,11,0.3)",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+              title="Filtrar solo Inamovilidades de Administrativos"
+            >
+              <Briefcase size={12} /> Adm: {totalInamovilidadAdm} {filtroPersonal === "ADMINISTRATIVO" ? "✓" : ""}
+            </button>
           </div>
           <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "6px" }}>
             <span>{itemsInamovilidad} ítems en filas con INAMOVILIDAD</span>
@@ -236,9 +278,64 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Barra de Filtros Rápidos y Buscador */}
+      {/* Barra de Filtros Rápidos, Estamento y Buscador */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "14px" }}>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          {/* Selector de Estamento */}
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "rgba(31, 41, 55, 0.6)", padding: "3px 6px", borderRadius: "6px", border: "1px solid var(--border-subtle)", marginRight: "6px" }}>
+            <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", fontWeight: 600, paddingLeft: "4px" }}>Estamento:</span>
+            <button
+              onClick={() => setFiltroPersonal("TODOS")}
+              style={{
+                padding: "3px 8px",
+                borderRadius: "4px",
+                fontSize: "0.74rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                border: "none",
+                background: filtroPersonal === "TODOS" ? "var(--accent-blue)" : "transparent",
+                color: filtroPersonal === "TODOS" ? "#ffffff" : "#94a3b8",
+              }}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setFiltroPersonal("DOCENTE")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "3px",
+                padding: "3px 8px",
+                borderRadius: "4px",
+                fontSize: "0.74rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                border: "none",
+                background: filtroPersonal === "DOCENTE" ? "#f59e0b" : "transparent",
+                color: filtroPersonal === "DOCENTE" ? "#1e1b4b" : "#fde68a",
+              }}
+            >
+              <GraduationCap size={12} /> Docentes
+            </button>
+            <button
+              onClick={() => setFiltroPersonal("ADMINISTRATIVO")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "3px",
+                padding: "3px 8px",
+                borderRadius: "4px",
+                fontSize: "0.74rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                border: "none",
+                background: filtroPersonal === "ADMINISTRATIVO" ? "#6366f1" : "transparent",
+                color: filtroPersonal === "ADMINISTRATIVO" ? "#ffffff" : "#c7d2fe",
+              }}
+            >
+              <Briefcase size={12} /> Adm.
+            </button>
+          </div>
           <button
             onClick={() => setTipoFiltro("TODOS")}
             className={`btn-secondary ${tipoFiltro === "TODOS" ? "active" : ""}`}
@@ -347,7 +444,20 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
                 <tr key={idx}>
                   <td style={{ fontWeight: 600 }}>{row.departamento}</td>
                   <td>{row.esfm}</td>
-                  <td style={{ color: "#cbd5e1" }}>{row.cargo}</td>
+                  <td style={{ color: "#cbd5e1" }}>
+                    {row.cargo}
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: "0.68rem",
+                        color: row.estamento === "DOCENTE" ? "#fde68a" : "#c7d2fe",
+                        fontWeight: 600,
+                        marginTop: "2px",
+                      }}
+                    >
+                      {row.estamento === "DOCENTE" ? "🎓 Docente" : "💼 Administrativo"}
+                    </span>
+                  </td>
                   <td style={{ fontWeight: 500, color: "#ffffff" }}>{row.especialidad}</td>
                   <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)" }}>
                     {row.anios3 || "—"}

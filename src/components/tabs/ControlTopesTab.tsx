@@ -26,12 +26,16 @@ import {
   Check,
   RotateCcw,
   Palette,
+  Calendar,
+  Filter,
 } from "lucide-react";
 
 interface Props {
   controlTopes: FilaControlTope[];
   convocatoriaRecords?: BaseRecord[];
   planillaSepRecords?: BaseRecord[];
+  gestion2023Records?: BaseRecord[];
+  sifmwebRecords?: BaseRecord[];
   filtroDepto: string;
   filtroEsfm: string;
   categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "SERVICIO" | "TODOS";
@@ -73,6 +77,8 @@ export const ControlTopesTab: React.FC<Props> = ({
   controlTopes,
   convocatoriaRecords = [],
   planillaSepRecords = [],
+  gestion2023Records = [],
+  sifmwebRecords = [],
   filtroDepto,
   filtroEsfm,
   categoriaPersonal = "DOCENTES",
@@ -86,19 +92,51 @@ export const ControlTopesTab: React.FC<Props> = ({
 
   // Estados del modal de cargos por ESFM (al hacer clic en el ojo)
   const [modalEsfm, setModalEsfm] = useState<FilaControlTope | null>(null);
-  const [tabModal, setTabModal] = useState<"JUNTOS" | "CONVOCATORIA" | "SEP">("JUNTOS");
+  const [tabModal, setTabModal] = useState<"JUNTOS" | "CONVOCATORIA" | "SEP" | "G2023" | "SIFMWEB">("JUNTOS");
+  const [compararContra, setCompararContra] = useState<"SEP" | "G2023" | "SIFMWEB">("SEP");
   const [modoSep, setModoSep] = useState<"AGRUPADO" | "DETALLE">("AGRUPADO");
   const [filtroModalTexto, setFiltroModalTexto] = useState<string>("");
+
+  // Filtro por duración de plaza (3 años, 2 años, 1 año)
+  const [filtroAnios, setFiltroAnios] = useState<{ a3: boolean; a2: boolean; a1: boolean }>({
+    a3: true,
+    a2: true,
+    a1: true,
+  });
+
+  const todosAniosActivos = filtroAnios.a3 && filtroAnios.a2 && filtroAnios.a1;
+
+  const toggleAnio = (anio: "a3" | "a2" | "a1") => {
+    setFiltroAnios((prev) => {
+      const next = { ...prev, [anio]: !prev[anio] };
+      if (!next.a3 && !next.a2 && !next.a1) {
+        return { a3: true, a2: true, a1: true };
+      }
+      return next;
+    });
+  };
+
+  const setSoloAnio = (modo: "todos" | "a3" | "a2" | "a1" | "a3_a2") => {
+    if (modo === "todos") setFiltroAnios({ a3: true, a2: true, a1: true });
+    else if (modo === "a3_a2") setFiltroAnios({ a3: true, a2: true, a1: false });
+    else if (modo === "a3") setFiltroAnios({ a3: true, a2: false, a1: false });
+    else if (modo === "a2") setFiltroAnios({ a3: false, a2: true, a1: false });
+    else if (modo === "a1") setFiltroAnios({ a3: false, a2: false, a1: true });
+  };
 
   // Estados para cotejo: tickear, separar por colores y ver faltantes
   const [marcasConv, setMarcasConv] = useState<Record<string, { tick: boolean; colorId: string }>>({});
   const [marcasSep, setMarcasSep] = useState<Record<string, { tick: boolean; colorId: string }>>({});
+  const [marcasG2023, setMarcasG2023] = useState<Record<string, { tick: boolean; colorId: string }>>({});
+  const [marcasSifm, setMarcasSifm] = useState<Record<string, { tick: boolean; colorId: string }>>({});
   const [colorActivo, setColorActivo] = useState<string>("emerald");
-  const [filtroCotejo, setFiltroCotejo] = useState<"TODOS" | "FALTAN" | "TICKEADOS">("TODOS");
+  const [filtroCotejo, setFiltroCotejo] = useState<"TODOS" | "FALTAN" | "TICKEADOS" | "INAMOVILIDAD">("TODOS");
 
   // Ordenamiento por color
   const [sortConvColor, setSortConvColor] = useState<boolean>(false);
   const [sortSepColor, setSortSepColor] = useState<boolean>(false);
+  const [sortG2023Color, setSortG2023Color] = useState<boolean>(false);
+  const [sortSifmColor, setSortSifmColor] = useState<boolean>(false);
 
   // Ordenamiento independiente para Convocatoria
   const [sortConvField, setSortConvField] = useState<string>("cargo");
@@ -107,6 +145,14 @@ export const ControlTopesTab: React.FC<Props> = ({
   // Ordenamiento independiente para Planilla SEP
   const [sortSepField, setSortSepField] = useState<string>("cantidad");
   const [sortSepOrder, setSortSepOrder] = useState<"asc" | "desc">("desc");
+
+  // Ordenamiento independiente para Gestión 2023
+  const [sortG2023Field, setSortG2023Field] = useState<string>("cargo");
+  const [sortG2023Order, setSortG2023Order] = useState<"asc" | "desc">("asc");
+
+  // Ordenamiento independiente para SIFMWEB
+  const [sortSifmField, setSortSifmField] = useState<string>("cantidad");
+  const [sortSifmOrder, setSortSifmOrder] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -243,6 +289,30 @@ export const ControlTopesTab: React.FC<Props> = ({
     });
   }, [modalEsfm, planillaSepRecords, categoriaPersonal]);
 
+  // Cargos de Gestión 2023 de la institución seleccionada
+  const cargosGestion2023 = useMemo(() => {
+    if (!modalEsfm || !gestion2023Records || gestion2023Records.length === 0) return [];
+    const depTarget = modalEsfm.departamento.toUpperCase().trim();
+    const esfmRawTarget = modalEsfm.esfm.toUpperCase().trim();
+    const esfmKeyTarget = modalEsfm.esfm_key || "";
+
+    return gestion2023Records.filter((r) => {
+      if (r.departamento.toUpperCase().trim() !== depTarget) return false;
+      if (!cumpleCategoriaPersonal(r, categoriaPersonal)) return false;
+      if (esfmKeyTarget && r.esfm_key === esfmKeyTarget) return true;
+      const raw = (r.esfm_raw || "").toUpperCase().trim();
+      return raw.includes(esfmRawTarget) || esfmRawTarget.includes(raw);
+    });
+  }, [modalEsfm, gestion2023Records, categoriaPersonal]);
+
+  // Total de cargos con inamovilidad en la institución
+  const totalConvInamovilidad = useMemo(() => {
+    return cargosConvocados.filter((r) => {
+      const d = (r.detalle || "").toUpperCase();
+      return d.includes("INAMOBILIDAD") || d.includes("INAMOVILIDAD");
+    }).length;
+  }, [cargosConvocados]);
+
   // Métodos para cotejo interactivo
   const toggleTickConv = (key: string) => {
     setMarcasConv((prev) => {
@@ -290,15 +360,86 @@ export const ControlTopesTab: React.FC<Props> = ({
     });
   };
 
+  const toggleTickG2023 = (key: string) => {
+    setMarcasG2023((prev) => {
+      const actual = prev[key];
+      if (actual?.tick) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: { tick: true, colorId: colorActivo } };
+    });
+  };
+
+  const ciclarColorG2023 = (e: React.MouseEvent, key: string) => {
+    e.stopPropagation();
+    setMarcasG2023((prev) => {
+      const actual = prev[key];
+      const actualColorId = actual?.colorId || colorActivo;
+      const idx = PALETA_COLORES.findIndex((c) => c.id === actualColorId);
+      const nextColor = PALETA_COLORES[(idx + 1) % PALETA_COLORES.length].id;
+      return { ...prev, [key]: { tick: true, colorId: nextColor } };
+    });
+  };
+
+  const handleSortG2023 = (field: string) => {
+    setSortG2023Color(false);
+    if (sortG2023Field === field) {
+      setSortG2023Order(sortG2023Order === "asc" ? "desc" : "asc");
+    } else {
+      setSortG2023Field(field);
+      setSortG2023Order(field === "cargo" || field === "descripcion" ? "asc" : "desc");
+    }
+  };
+
   const limpiarMarcas = () => {
     setMarcasConv({});
     setMarcasSep({});
+    setMarcasG2023({});
+    setMarcasSifm({});
   };
 
   const toggleSortAmbosColor = () => {
-    const activar = !(sortConvColor && sortSepColor);
+    const sortDerColor = compararContra === "SEP" ? sortSepColor : compararContra === "G2023" ? sortG2023Color : sortSifmColor;
+    const activar = !(sortConvColor && sortDerColor);
     setSortConvColor(activar);
     setSortSepColor(activar);
+    setSortG2023Color(activar);
+    setSortSifmColor(activar);
+  };
+
+  const toggleTickSifm = (key: string) => {
+    setMarcasSifm((prev) => {
+      const actual = prev[key];
+      if (actual?.tick) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: { tick: true, colorId: colorActivo } };
+    });
+  };
+
+  const ciclarColorSifm = (e: React.MouseEvent, key: string) => {
+    e.stopPropagation();
+    setMarcasSifm((prev) => {
+      const actual = prev[key];
+      const actualColorId = actual?.colorId || colorActivo;
+      const idx = PALETA_COLORES.findIndex((c) => c.id === actualColorId);
+      const nextColor = PALETA_COLORES[(idx + 1) % PALETA_COLORES.length].id;
+      return { ...prev, [key]: { tick: true, colorId: nextColor } };
+    });
+  };
+
+  const handleSortSifm = (field: string) => {
+    setSortSifmColor(false);
+    if (sortSifmField === field) {
+      setSortSifmOrder(sortSifmOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortSifmField(field);
+      setSortSifmOrder(field === "cargo" || field === "tipo_cargo" ? "asc" : "desc");
+    }
   };
 
   // Cargos SEP agrupados por denominación de cargo
@@ -333,6 +474,15 @@ export const ControlTopesTab: React.FC<Props> = ({
         const mDesc = (r.descripcion || "").toLowerCase().includes(txt);
         const mDet = (r.detalle || "").toLowerCase().includes(txt);
         return mCargo || mDesc || mDet;
+      });
+    }
+
+    if (!todosAniosActivos) {
+      list = list.filter((r) => {
+        const a3 = (r.anios_3 || 0) > 0;
+        const a2 = (r.anios_2 || 0) > 0;
+        const a1 = (r.anios_1 || 0) > 0;
+        return (filtroAnios.a3 && a3) || (filtroAnios.a2 && a2) || (filtroAnios.a1 && a1);
       });
     }
 
@@ -396,7 +546,7 @@ export const ControlTopesTab: React.FC<Props> = ({
     });
 
     return list;
-  }, [cargosConvocados, filtroModalTexto, filtroCotejo, marcasConv, sortConvColor, sortConvField, sortConvOrder]);
+  }, [cargosConvocados, filtroModalTexto, todosAniosActivos, filtroAnios, filtroCotejo, marcasConv, sortConvColor, sortConvField, sortConvOrder]);
 
   // Lista ordenada de Planilla SEP
   const cargosSepOrdenados = useMemo(() => {
@@ -539,6 +689,185 @@ export const ControlTopesTab: React.FC<Props> = ({
       return marcasSep[key]?.tick;
     }).length;
   }, [modoSep, cargosSepAgrupados, cargosSep, marcasSep]);
+
+  // Lista ordenada de Gestión 2023 (3/2 años)
+  const cargosGestion2023Ordenados = useMemo(() => {
+    let list = cargosGestion2023.map((r, i) => ({
+      ...r,
+      _key: `g23_${r.cargo_raw || ""}_${r.descripcion || ""}_${r.esfm_key || ""}_${i}`,
+    }));
+
+    if (filtroModalTexto) {
+      const txt = filtroModalTexto.toLowerCase().trim();
+      list = list.filter((r) => {
+        const mCargo = (r.cargo_raw || "").toLowerCase().includes(txt);
+        const mDesc = (r.descripcion || "").toLowerCase().includes(txt);
+        return mCargo || mDesc;
+      });
+    }
+
+    if (!todosAniosActivos) {
+      list = list.filter((r) => {
+        const a3 = (r.anios_3 || 0) > 0;
+        const a2 = (r.anios_2 || 0) > 0;
+        return (filtroAnios.a3 && a3) || (filtroAnios.a2 && a2);
+      });
+    }
+
+    if (filtroCotejo === "FALTAN") {
+      list = list.filter((r) => !marcasG2023[r._key]?.tick);
+    } else if (filtroCotejo === "TICKEADOS") {
+      list = list.filter((r) => marcasG2023[r._key]?.tick);
+    }
+
+    if (sortG2023Color) {
+      const colorOrder = PALETA_COLORES.map((c) => c.id);
+      list.sort((a, b) => {
+        const ma = marcasG2023[a._key];
+        const mb = marcasG2023[b._key];
+        const haA = !!ma?.tick;
+        const haB = !!mb?.tick;
+        if (haA && !haB) return -1;
+        if (!haA && haB) return 1;
+        if (haA && haB) {
+          const ia = colorOrder.indexOf(ma.colorId ?? "");
+          const ib = colorOrder.indexOf(mb.colorId ?? "");
+          if (ia !== ib) return ia - ib;
+        }
+        const compCargo = (a.cargo_raw || "").localeCompare(b.cargo_raw || "");
+        if (compCargo !== 0) return compCargo;
+        return (a.descripcion || "").localeCompare(b.descripcion || "");
+      });
+      return list;
+    }
+
+    list.sort((a, b) => {
+      let va: any = "";
+      let vb: any = "";
+      if (sortG2023Field === "cargo") {
+        va = a.cargo_raw || "";
+        vb = b.cargo_raw || "";
+      } else if (sortG2023Field === "descripcion") {
+        va = a.descripcion || "";
+        vb = b.descripcion || "";
+      } else if (sortG2023Field === "a3") {
+        va = a.anios_3 || 0;
+        vb = b.anios_3 || 0;
+      } else if (sortG2023Field === "a2") {
+        va = a.anios_2 || 0;
+        vb = b.anios_2 || 0;
+      } else if (sortG2023Field === "total") {
+        va = (a.anios_3 || 0) + (a.anios_2 || 0);
+        vb = (b.anios_3 || 0) + (b.anios_2 || 0);
+      }
+      if (typeof va === "string") {
+        const cmp = va.localeCompare(vb);
+        return sortG2023Order === "asc" ? cmp : -cmp;
+      }
+      return sortG2023Order === "asc" ? va - vb : vb - va;
+    });
+
+    return list;
+  }, [cargosGestion2023, filtroModalTexto, todosAniosActivos, filtroAnios, filtroCotejo, marcasG2023, sortG2023Color, sortG2023Field, sortG2023Order]);
+
+  const totPlazasG2023 = useMemo(() => {
+    return cargosGestion2023.reduce((sum, r) => sum + (r.anios_3 || 0) + (r.anios_2 || 0), 0);
+  }, [cargosGestion2023]);
+
+  const totalG2023Marcados = useMemo(() => {
+    return cargosGestion2023.filter((r, i) => {
+      const key = `g23_${r.cargo_raw || ""}_${r.descripcion || ""}_${r.esfm_key || ""}_${i}`;
+      return marcasG2023[key]?.tick;
+    }).length;
+  }, [cargosGestion2023, marcasG2023]);
+
+  // Registros SIFMWEB de la institución seleccionada
+  const registrosSifm = useMemo(() => {
+    if (!modalEsfm || !sifmwebRecords || sifmwebRecords.length === 0) return [];
+    const depTarget = modalEsfm.departamento.toUpperCase().trim();
+    const esfmRawTarget = modalEsfm.esfm.toUpperCase().trim();
+    const esfmKeyTarget = modalEsfm.esfm_key || "";
+
+    return sifmwebRecords.filter((r) => {
+      if (r.departamento.toUpperCase().trim() !== depTarget) return false;
+      if (!cumpleCategoriaPersonal(r, categoriaPersonal)) return false;
+      if (esfmKeyTarget && r.esfm_key === esfmKeyTarget) return true;
+      const raw = (r.esfm_raw || "").toUpperCase().trim();
+      return raw.includes(esfmRawTarget) || esfmRawTarget.includes(raw);
+    });
+  }, [modalEsfm, sifmwebRecords, categoriaPersonal]);
+
+  // SIFMWEB agrupado por cargo + tipo_cargo
+  const registrosSifmAgrupados = useMemo(() => {
+    const map = new Map<string, { _key: string; cargo: string; tipo_cargo: string; cantidad: number }>();
+    for (const r of registrosSifm) {
+      const cargo = r.cargo_raw || "SIN CARGO";
+      const tipo = r.tipo_cargo || r.categoria || "";
+      const key = `${cargo}___${tipo}`;
+      const item = map.get(key);
+      if (!item) {
+        map.set(key, { _key: `sifm_${key}`, cargo, tipo_cargo: tipo, cantidad: 1 });
+      } else {
+        item.cantidad += 1;
+      }
+    }
+    return Array.from(map.values());
+  }, [registrosSifm]);
+
+  const cargosSifmOrdenados = useMemo(() => {
+    let list = registrosSifmAgrupados.map((r) => ({ ...r }));
+
+    if (filtroModalTexto) {
+      const txt = filtroModalTexto.toLowerCase().trim();
+      list = list.filter((r) =>
+        r.cargo.toLowerCase().includes(txt) || r.tipo_cargo.toLowerCase().includes(txt)
+      );
+    }
+
+    if (filtroCotejo === "FALTAN") {
+      list = list.filter((r) => !marcasSifm[r._key]?.tick);
+    } else if (filtroCotejo === "TICKEADOS") {
+      list = list.filter((r) => marcasSifm[r._key]?.tick);
+    }
+
+    if (sortSifmColor) {
+      const colorOrder = PALETA_COLORES.map((c) => c.id);
+      list.sort((a, b) => {
+        const ma = marcasSifm[a._key];
+        const mb = marcasSifm[b._key];
+        const haA = !!ma?.tick;
+        const haB = !!mb?.tick;
+        if (haA && !haB) return -1;
+        if (!haA && haB) return 1;
+        if (haA && haB) {
+          const ia = colorOrder.indexOf(ma.colorId ?? "");
+          const ib = colorOrder.indexOf(mb.colorId ?? "");
+          if (ia !== ib) return ia - ib;
+        }
+        return a.cargo.localeCompare(b.cargo);
+      });
+      return list;
+    }
+
+    list.sort((a, b) => {
+      let va: string | number = "";
+      let vb: string | number = "";
+      if (sortSifmField === "cargo") { va = a.cargo; vb = b.cargo; }
+      else if (sortSifmField === "tipo_cargo") { va = a.tipo_cargo; vb = b.tipo_cargo; }
+      else if (sortSifmField === "cantidad") { va = a.cantidad; vb = b.cantidad; }
+      if (typeof va === "string") {
+        const cmp = va.localeCompare(vb as string);
+        return sortSifmOrder === "asc" ? cmp : -cmp;
+      }
+      return sortSifmOrder === "asc" ? (va as number) - (vb as number) : (vb as number) - (va as number);
+    });
+
+    return list;
+  }, [registrosSifmAgrupados, filtroModalTexto, filtroCotejo, marcasSifm, sortSifmColor, sortSifmField, sortSifmOrder]);
+
+  const totalSifmMarcados = useMemo(() => {
+    return registrosSifmAgrupados.filter((r) => marcasSifm[r._key]?.tick).length;
+  }, [registrosSifmAgrupados, marcasSifm]);
 
   // Variables de densidad / tamaño
   const configDensidad = {
@@ -1150,7 +1479,52 @@ export const ControlTopesTab: React.FC<Props> = ({
                     transition: "all 0.15s ease",
                   }}
                 >
+                  <Layers size={13} />
                   Solo Planilla SEP ({cargosSep.length})
+                </button>
+
+                <button
+                  onClick={() => setTabModal("G2023")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: tabModal === "G2023" ? "#10b981" : "rgba(31, 41, 55, 0.5)",
+                    borderColor: tabModal === "G2023" ? "#10b981" : "var(--border-subtle)",
+                    color: tabModal === "G2023" ? "#ffffff" : "#94a3b8",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <Calendar size={13} />
+                  Solo Gestión 2023 ({cargosGestion2023.length})
+                </button>
+
+                <button
+                  onClick={() => setTabModal("SIFMWEB")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: tabModal === "SIFMWEB" ? "#f59e0b" : "rgba(31, 41, 55, 0.5)",
+                    borderColor: tabModal === "SIFMWEB" ? "#f59e0b" : "var(--border-subtle)",
+                    color: tabModal === "SIFMWEB" ? "#ffffff" : "#94a3b8",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <Building2 size={13} />
+                  Solo SIFMWEB ({registrosSifmAgrupados.length})
                 </button>
               </div>
 
@@ -1165,6 +1539,192 @@ export const ControlTopesTab: React.FC<Props> = ({
                   className="form-input"
                   style={{ paddingLeft: "32px", fontSize: "0.8rem", width: "100%", padding: "6px 10px 6px 32px" }}
                 />
+              </div>
+            </div>
+
+            {/* Selector de Comparación y Filtro de Años (3 años, 2 años, 1 año) */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "10px",
+                padding: "8px 22px",
+                background: "rgba(17, 24, 39, 0.85)",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                fontSize: "0.78rem",
+              }}
+            >
+              {/* Selector de comparación en Vista Paralela */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <span style={{ color: "#94a3b8", fontWeight: 600 }}>Comparar contra:</span>
+                <button
+                  onClick={() => setCompararContra("SEP")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "4px 12px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.76rem",
+                    fontWeight: 700,
+                    border: "1.5px solid",
+                    background: compararContra === "SEP" ? "rgba(99, 102, 241, 0.25)" : "rgba(255, 255, 255, 0.04)",
+                    borderColor: compararContra === "SEP" ? "#818cf8" : "rgba(255, 255, 255, 0.12)",
+                    color: compararContra === "SEP" ? "#c7d2fe" : "#94a3b8",
+                  }}
+                >
+                  <Layers size={13} />
+                  1. Planilla SEP ({cargosSep.length} ítems)
+                </button>
+                <button
+                  onClick={() => setCompararContra("G2023")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "4px 12px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.76rem",
+                    fontWeight: 700,
+                    border: "1.5px solid",
+                    background: compararContra === "G2023" ? "rgba(16, 185, 129, 0.25)" : "rgba(255, 255, 255, 0.04)",
+                    borderColor: compararContra === "G2023" ? "#34d399" : "rgba(255, 255, 255, 0.12)",
+                    color: compararContra === "G2023" ? "#a7f3d0" : "#94a3b8",
+                  }}
+                >
+                  <Calendar size={13} />
+                  3. GESTIÓN 2023 ({cargosGestion2023.length} cargos | 3/2 años)
+                </button>
+                <button
+                  onClick={() => setCompararContra("SIFMWEB")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "4px 12px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.76rem",
+                    fontWeight: 700,
+                    border: "1.5px solid",
+                    background: compararContra === "SIFMWEB" ? "rgba(245, 158, 11, 0.25)" : "rgba(255, 255, 255, 0.04)",
+                    borderColor: compararContra === "SIFMWEB" ? "#f59e0b" : "rgba(255, 255, 255, 0.12)",
+                    color: compararContra === "SIFMWEB" ? "#fde68a" : "#94a3b8",
+                  }}
+                >
+                  <Building2 size={13} />
+                  2. SIFMWEB ({registrosSifmAgrupados.length} cargos | personas)
+                </button>
+              </div>
+
+              {/* Filtro Multi-Selección de Años */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                <span style={{ color: "#94a3b8", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  <Filter size={13} />
+                  Filtrar Años:
+                </span>
+
+                {/* Botón Todos */}
+                <button
+                  onClick={() => setSoloAnio("todos")}
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: todosAniosActivos ? "rgba(255, 255, 255, 0.2)" : "transparent",
+                    borderColor: todosAniosActivos ? "#ffffff" : "rgba(255, 255, 255, 0.15)",
+                    color: todosAniosActivos ? "#ffffff" : "#94a3b8",
+                  }}
+                >
+                  Todos
+                </button>
+
+                {/* Botón 3 y 2 Años */}
+                <button
+                  onClick={() => setSoloAnio("a3_a2")}
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: filtroAnios.a3 && filtroAnios.a2 && !filtroAnios.a1 ? "rgba(59, 130, 246, 0.3)" : "transparent",
+                    borderColor: filtroAnios.a3 && filtroAnios.a2 && !filtroAnios.a1 ? "#60a5fa" : "rgba(255, 255, 255, 0.15)",
+                    color: filtroAnios.a3 && filtroAnios.a2 && !filtroAnios.a1 ? "#93c5fd" : "#94a3b8",
+                  }}
+                  title="Mostrar únicamente cargos de 3 y 2 Años (excluye compulsas de 1 año)"
+                >
+                  3 y 2 Años
+                </button>
+
+                {/* Checkboxes individuales interactivos */}
+                <button
+                  onClick={() => toggleAnio("a3")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: filtroAnios.a3 ? "rgba(59, 130, 246, 0.25)" : "transparent",
+                    borderColor: filtroAnios.a3 ? "#3b82f6" : "rgba(255, 255, 255, 0.12)",
+                    color: filtroAnios.a3 ? "#93c5fd" : "#64748b",
+                  }}
+                >
+                  <span style={{ fontSize: "0.7rem" }}>{filtroAnios.a3 ? "☑" : "☐"}</span> 3 Años
+                </button>
+
+                <button
+                  onClick={() => toggleAnio("a2")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: filtroAnios.a2 ? "rgba(245, 158, 11, 0.25)" : "transparent",
+                    borderColor: filtroAnios.a2 ? "#f59e0b" : "rgba(255, 255, 255, 0.12)",
+                    color: filtroAnios.a2 ? "#fde68a" : "#64748b",
+                  }}
+                >
+                  <span style={{ fontSize: "0.7rem" }}>{filtroAnios.a2 ? "☑" : "☐"}</span> 2 Años
+                </button>
+
+                <button
+                  onClick={() => toggleAnio("a1")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: filtroAnios.a1 ? "rgba(168, 85, 247, 0.25)" : "transparent",
+                    borderColor: filtroAnios.a1 ? "#a855f7" : "rgba(255, 255, 255, 0.12)",
+                    color: filtroAnios.a1 ? "#d8b4fe" : "#64748b",
+                  }}
+                >
+                  <span style={{ fontSize: "0.7rem" }}>{filtroAnios.a1 ? "☑" : "☐"}</span> 1 Año
+                </button>
               </div>
             </div>
 
@@ -1199,7 +1759,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                     color: filtroCotejo === "TODOS" ? "#ffffff" : "#94a3b8",
                   }}
                 >
-                  Todos ({cargosConvocados.length} Conv / {modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length} SEP)
+                  Todos ({cargosConvocadosOrdenados.length} Conv / {compararContra === "SEP" ? (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) : compararContra === "G2023" ? cargosGestion2023Ordenados.length : cargosSifmOrdenados.length} {compararContra === "SEP" ? "SEP" : compararContra === "G2023" ? "G2023" : "SIFMWEB"})
                 </button>
                 <button
                   onClick={() => setFiltroCotejo("FALTAN")}
@@ -1220,7 +1780,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                   title="Oculta los ya tickeados para ver únicamente los que aún faltan emparejar"
                 >
                   <AlertTriangle size={13} />
-                  Faltan Identificar ({cargosConvocados.length - totalConvMarcados} en Conv | {(modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) - totalSepMarcados} en SEP)
+                  Faltan Identificar ({cargosConvocadosOrdenados.length - totalConvMarcados} Conv | {(compararContra === "SEP" ? (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) - totalSepMarcados : compararContra === "G2023" ? cargosGestion2023Ordenados.length - totalG2023Marcados : cargosSifmOrdenados.length - totalSifmMarcados)} {compararContra === "SEP" ? "SEP" : compararContra === "G2023" ? "G2023" : "SIFMWEB"})
                 </button>
                 <button
                   onClick={() => setFiltroCotejo("TICKEADOS")}
@@ -1240,7 +1800,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                   }}
                 >
                   <Check size={13} />
-                  Tickeados ({totalConvMarcados + totalSepMarcados})
+                  Tickeados ({totalConvMarcados + (compararContra === "SEP" ? totalSepMarcados : compararContra === "G2023" ? totalG2023Marcados : totalSifmMarcados)})
                 </button>
               </div>
 
@@ -1294,18 +1854,18 @@ export const ControlTopesTab: React.FC<Props> = ({
                     fontWeight: 700,
                     cursor: "pointer",
                     border: "1px solid",
-                    background: sortConvColor && sortSepColor ? "rgba(99, 102, 241, 0.35)" : "rgba(255, 255, 255, 0.06)",
-                    borderColor: sortConvColor && sortSepColor ? "#818cf8" : "rgba(255, 255, 255, 0.15)",
-                    color: sortConvColor && sortSepColor ? "#e0e7ff" : "#cbd5e1",
+                    background: sortConvColor && (compararContra === "SEP" ? sortSepColor : sortG2023Color) ? "rgba(99, 102, 241, 0.35)" : "rgba(255, 255, 255, 0.06)",
+                    borderColor: sortConvColor && (compararContra === "SEP" ? sortSepColor : sortG2023Color) ? "#818cf8" : "rgba(255, 255, 255, 0.15)",
+                    color: sortConvColor && (compararContra === "SEP" ? sortSepColor : sortG2023Color) ? "#e0e7ff" : "#cbd5e1",
                   }}
-                  title="Alinear y ordenar ambos paneles (Convocatoria y Planilla SEP) con la misma secuencia de colores"
+                  title="Alinear y ordenar ambos paneles con la misma secuencia de colores"
                 >
-                  <Palette size={13} color={sortConvColor && sortSepColor ? "#a5b4fc" : "#94a3b8"} />
-                  {sortConvColor && sortSepColor ? "✓ Ambos ordenados por color" : "Ordenar ambos lados por color"}
+                  <Palette size={13} color={sortConvColor && (compararContra === "SEP" ? sortSepColor : sortG2023Color) ? "#a5b4fc" : "#94a3b8"} />
+                  {sortConvColor && (compararContra === "SEP" ? sortSepColor : sortG2023Color) ? "✓ Ambos ordenados por color" : "Ordenar ambos lados por color"}
                 </button>
 
                 {/* Botón Reiniciar Marcas */}
-                {(totalConvMarcados > 0 || totalSepMarcados > 0) && (
+                {(totalConvMarcados > 0 || totalSepMarcados > 0 || totalG2023Marcados > 0) && (
                   <button
                     onClick={limpiarMarcas}
                     style={{
@@ -1570,232 +2130,616 @@ export const ControlTopesTab: React.FC<Props> = ({
                     </div>
                   </div>
 
-                  {/* PANEL DERECHO: PLANILLA SEP */}
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      background: "rgba(15, 23, 42, 0.5)",
-                      borderRadius: "10px",
-                      border: "1px solid rgba(129, 140, 248, 0.35)",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {/* Header Panel Planilla SEP */}
+                  {/* PANEL DERECHO: PLANILLA SEP O GESTIÓN 2023 SEGÚN COMPARARCONTRA */}
+                  {compararContra === "SEP" ? (
                     <div
                       style={{
-                        padding: "8px 16px",
-                        background: "rgba(129, 140, 248, 0.15)",
-                        borderBottom: "1px solid rgba(129, 140, 248, 0.3)",
                         display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                        gap: "8px",
+                        flexDirection: "column",
+                        background: "rgba(15, 23, 42, 0.5)",
+                        borderRadius: "10px",
+                        border: "1px solid rgba(129, 140, 248, 0.35)",
+                        overflow: "hidden",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <Layers size={16} color="#818cf8" />
-                        <span style={{ fontWeight: 700, color: "#c7d2fe", fontSize: "0.85rem" }}>
-                          Ítems Planilla SEP ({cargosSepOrdenados.length})
-                        </span>
-                        <span
-                          style={{
-                            fontSize: "0.7rem",
-                            padding: "1px 6px",
-                            borderRadius: "4px",
-                            background: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "rgba(16, 185, 129, 0.25)" : "rgba(129, 140, 248, 0.2)",
-                            color: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "#34d399" : "#c7d2fe",
-                            border: "1px solid",
-                            borderColor: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "rgba(16, 185, 129, 0.5)" : "rgba(129, 140, 248, 0.4)",
-                            fontWeight: 600,
-                          }}
-                        >
-                          ✓ {totalSepMarcados} / {modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length} tickeados
-                        </span>
+                      {/* Header Panel Planilla SEP */}
+                      <div
+                        style={{
+                          padding: "8px 16px",
+                          background: "rgba(129, 140, 248, 0.15)",
+                          borderBottom: "1px solid rgba(129, 140, 248, 0.3)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <Layers size={16} color="#818cf8" />
+                          <span style={{ fontWeight: 700, color: "#c7d2fe", fontSize: "0.85rem" }}>
+                            Ítems Planilla SEP ({cargosSepOrdenados.length})
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "0.7rem",
+                              padding: "1px 6px",
+                              borderRadius: "4px",
+                              background: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "rgba(16, 185, 129, 0.25)" : "rgba(129, 140, 248, 0.2)",
+                              color: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "#34d399" : "#c7d2fe",
+                              border: "1px solid",
+                              borderColor: totalSepMarcados === (modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length) ? "rgba(16, 185, 129, 0.5)" : "rgba(129, 140, 248, 0.4)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            ✓ {totalSepMarcados} / {modoSep === "AGRUPADO" ? cargosSepAgrupados.length : cargosSep.length} tickeados
+                          </span>
+                        </div>
+
+                        {/* Selector Agrupado vs Detalle */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <button
+                            onClick={() => setModoSep("AGRUPADO")}
+                            style={{
+                              padding: "3px 8px",
+                              borderRadius: "4px",
+                              fontSize: "0.72rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              border: "1px solid",
+                              background: modoSep === "AGRUPADO" ? "#6366f1" : "transparent",
+                              borderColor: modoSep === "AGRUPADO" ? "#818cf8" : "rgba(255,255,255,0.1)",
+                              color: modoSep === "AGRUPADO" ? "#ffffff" : "#94a3b8",
+                            }}
+                          >
+                            Agrupado ({cargosSepAgrupados.length})
+                          </button>
+                          <button
+                            onClick={() => setModoSep("DETALLE")}
+                            style={{
+                              padding: "3px 8px",
+                              borderRadius: "4px",
+                              fontSize: "0.72rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              border: "1px solid",
+                              background: modoSep === "DETALLE" ? "#6366f1" : "transparent",
+                              borderColor: modoSep === "DETALLE" ? "#818cf8" : "rgba(255,255,255,0.1)",
+                              color: modoSep === "DETALLE" ? "#ffffff" : "#94a3b8",
+                            }}
+                          >
+                            Ítem x Ítem ({cargosSep.length})
+                          </button>
+                          <span style={{ fontSize: "0.76rem", color: "#a5b4fc", fontWeight: 700, fontFamily: "var(--font-mono, monospace)", marginLeft: "4px" }}>
+                            {modalEsfm.topeSEP} ítems
+                          </span>
+                          <button
+                            onClick={toggleSortAmbosColor}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              padding: "3px 8px",
+                              borderRadius: "5px",
+                              fontSize: "0.72rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              border: "1px solid",
+                              background: sortConvColor && sortSepColor ? "rgba(99, 102, 241, 0.3)" : "transparent",
+                              borderColor: sortConvColor && sortSepColor ? "#818cf8" : "rgba(255,255,255,0.1)",
+                              color: sortConvColor && sortSepColor ? "#c7d2fe" : "#64748b",
+                            }}
+                            title="Ordenar ambos lados por color de cotejo"
+                          >
+                            <Palette size={12} />
+                            Por color
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Selector Agrupado vs Detalle */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <button
-                          onClick={() => setModoSep("AGRUPADO")}
-                          style={{
-                            padding: "3px 8px",
-                            borderRadius: "4px",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            border: "1px solid",
-                            background: modoSep === "AGRUPADO" ? "#6366f1" : "transparent",
-                            borderColor: modoSep === "AGRUPADO" ? "#818cf8" : "rgba(255,255,255,0.1)",
-                            color: modoSep === "AGRUPADO" ? "#ffffff" : "#94a3b8",
-                          }}
-                        >
-                          Agrupado ({cargosSepAgrupados.length})
-                        </button>
-                        <button
-                          onClick={() => setModoSep("DETALLE")}
-                          style={{
-                            padding: "3px 8px",
-                            borderRadius: "4px",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            border: "1px solid",
-                            background: modoSep === "DETALLE" ? "#6366f1" : "transparent",
-                            borderColor: modoSep === "DETALLE" ? "#818cf8" : "rgba(255,255,255,0.1)",
-                            color: modoSep === "DETALLE" ? "#ffffff" : "#94a3b8",
-                          }}
-                        >
-                          Ítem x Ítem ({cargosSep.length})
-                        </button>
-                        <span style={{ fontSize: "0.76rem", color: "#a5b4fc", fontWeight: 700, fontFamily: "var(--font-mono, monospace)", marginLeft: "4px" }}>
-                          {modalEsfm.topeSEP} ítems
-                        </span>
-                        <button
-                          onClick={toggleSortAmbosColor}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            padding: "3px 8px",
-                            borderRadius: "5px",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            border: "1px solid",
-                            background: sortConvColor && sortSepColor ? "rgba(99, 102, 241, 0.3)" : "transparent",
-                            borderColor: sortConvColor && sortSepColor ? "#818cf8" : "rgba(255,255,255,0.1)",
-                            color: sortConvColor && sortSepColor ? "#c7d2fe" : "#64748b",
-                          }}
-                          title="Ordenar ambos lados por color de cotejo"
-                        >
-                          <Palette size={12} />
-                          Por color
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Tabla Planilla SEP Ordenable */}
-                    <div style={{ flex: 1, overflow: "auto" }}>
-                      <table className="custom-table" style={{ fontSize: "0.78rem", margin: 0 }}>
-                        <thead style={{ position: "sticky", top: 0, zIndex: 5, background: "#111827" }}>
-                          <tr>
-                            <th style={{ width: "44px", textAlign: "center", padding: "8px 4px" }} title="Tickear para marcar y agrupar por color">
-                              ✓
-                            </th>
-                            <th style={{ width: "28px", textAlign: "center", padding: "8px 4px" }}>#</th>
-                            <th
-                              onClick={() => handleSortSep("cargo")}
-                              style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
-                              title="Clic para ordenar por Cargo"
-                            >
-                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                <span>Cargo en Planilla SEP</span>
-                                {sortSepField === "cargo" ? (
-                                  sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
-                                ) : (
-                                  <ArrowUpDown size={11} color="#64748b" />
-                                )}
-                              </div>
-                            </th>
-                            <th
-                              onClick={() => handleSortSep("descripcion")}
-                              style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
-                              title="Clic para ordenar por Descripción"
-                            >
-                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                <span>Descripción / Detalle</span>
-                                {sortSepField === "descripcion" ? (
-                                  sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
-                                ) : (
-                                  <ArrowUpDown size={11} color="#64748b" />
-                                )}
-                              </div>
-                            </th>
-                            <th
-                              onClick={() => handleSortSep("cantidad")}
-                              style={{ textAlign: "right", width: "65px", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
-                              title="Clic para ordenar por Cantidad de Ítems"
-                            >
-                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "flex-end" }}>
-                                <span>Ítems</span>
-                                {sortSepField === "cantidad" ? (
-                                  sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
-                                ) : (
-                                  <ArrowUpDown size={11} color="#64748b" />
-                                )}
-                              </div>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cargosSepOrdenados.length === 0 ? (
+                      {/* Tabla Planilla SEP Ordenable */}
+                      <div style={{ flex: 1, overflow: "auto" }}>
+                        <table className="custom-table" style={{ fontSize: "0.78rem", margin: 0 }}>
+                          <thead style={{ position: "sticky", top: 0, zIndex: 5, background: "#111827" }}>
                             <tr>
-                              <td colSpan={5} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
-                                {filtroCotejo === "FALTAN"
-                                  ? "¡Excelente! Ya has tickeado todos los ítems de Planilla SEP."
-                                  : "No se encontraron ítems con el filtro aplicado."}
-                              </td>
+                              <th style={{ width: "44px", textAlign: "center", padding: "8px 4px" }} title="Tickear para marcar y agrupar por color">
+                                ✓
+                              </th>
+                              <th style={{ width: "28px", textAlign: "center", padding: "8px 4px" }}>#</th>
+                              <th
+                                onClick={() => handleSortSep("cargo")}
+                                style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                                title="Clic para ordenar por Cargo"
+                              >
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  <span>Cargo en Planilla SEP</span>
+                                  {sortSepField === "cargo" ? (
+                                    sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
+                                  ) : (
+                                    <ArrowUpDown size={11} color="#64748b" />
+                                  )}
+                                </div>
+                              </th>
+                              <th
+                                onClick={() => handleSortSep("descripcion")}
+                                style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                                title="Clic para ordenar por Descripción"
+                              >
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  <span>Descripción / Detalle</span>
+                                  {sortSepField === "descripcion" ? (
+                                    sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
+                                  ) : (
+                                    <ArrowUpDown size={11} color="#64748b" />
+                                  )}
+                                </div>
+                              </th>
+                              <th
+                                onClick={() => handleSortSep("cantidad")}
+                                style={{ textAlign: "right", width: "65px", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                                title="Clic para ordenar por Cantidad de Ítems"
+                              >
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "flex-end" }}>
+                                  <span>Ítems</span>
+                                  {sortSepField === "cantidad" ? (
+                                    sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
+                                  ) : (
+                                    <ArrowUpDown size={11} color="#64748b" />
+                                  )}
+                                </div>
+                              </th>
                             </tr>
-                          ) : (
-                            cargosSepOrdenados.map((r, i) => {
-                              const marca = marcasSep[r._key];
-                              const isTick = !!marca?.tick;
-                              const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
+                          </thead>
+                          <tbody>
+                            {cargosSepOrdenados.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                                  {filtroCotejo === "FALTAN"
+                                    ? "¡Excelente! Ya has tickeado todos los ítems de Planilla SEP."
+                                    : "No se encontraron ítems con el filtro aplicado."}
+                                </td>
+                              </tr>
+                            ) : (
+                              cargosSepOrdenados.map((r, i) => {
+                                const marca = marcasSep[r._key];
+                                const isTick = !!marca?.tick;
+                                const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
 
-                              return (
-                                <tr
-                                  key={r._key}
-                                  style={{
-                                    background: isTick ? colorObj?.bg : undefined,
-                                    borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
-                                    transition: "background 0.15s ease",
-                                  }}
-                                >
-                                  {/* Casilla Checkbox + Color Selector */}
-                                  <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleTickSep(r._key)}
-                                        style={{
-                                          width: "18px",
-                                          height: "18px",
-                                          borderRadius: "4px",
-                                          border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
-                                          background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
-                                          display: "inline-flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          cursor: "pointer",
-                                          padding: 0,
-                                        }}
-                                        title={isTick ? "Desmarcar ítem" : "Tickear ítem con el color activo"}
-                                      >
-                                        {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
-                                      </button>
-                                      {isTick && (
+                                return (
+                                  <tr
+                                    key={r._key}
+                                    style={{
+                                      background: isTick ? colorObj?.bg : undefined,
+                                      borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                                      transition: "background 0.15s ease",
+                                    }}
+                                  >
+                                    {/* Casilla Checkbox + Color Selector */}
+                                    <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
                                         <button
                                           type="button"
-                                          onClick={(e) => ciclarColorSep(e, r._key)}
+                                          onClick={() => toggleTickSep(r._key)}
                                           style={{
-                                            width: "12px",
-                                            height: "12px",
-                                            borderRadius: "50%",
-                                            background: colorObj?.hex,
-                                            border: "1px solid rgba(255,255,255,0.7)",
+                                            width: "18px",
+                                            height: "18px",
+                                            borderRadius: "4px",
+                                            border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                            background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
                                             cursor: "pointer",
                                             padding: 0,
                                           }}
-                                          title={`Color: ${colorObj?.label}. Clic para cambiar de color`}
-                                        />
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td style={{ textAlign: "center", color: "#64748b", padding: "7px 4px" }}>{i + 1}</td>
-                                  <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9", padding: "7px 10px" }}>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                          title={isTick ? "Desmarcar ítem" : "Tickear ítem con el color activo"}
+                                        >
+                                          {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                        </button>
+                                        {isTick && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => ciclarColorSep(e, r._key)}
+                                            style={{
+                                              width: "12px",
+                                              height: "12px",
+                                              borderRadius: "50%",
+                                              background: colorObj?.hex,
+                                              border: "1px solid rgba(255,255,255,0.7)",
+                                              cursor: "pointer",
+                                              padding: 0,
+                                            }}
+                                            title={`Color: ${colorObj?.label}. Clic para cambiar de color`}
+                                          />
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ textAlign: "center", color: "#64748b", padding: "7px 4px" }}>{i + 1}</td>
+                                    <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9", padding: "7px 10px" }}>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                          <span>{r.cargo}</span>
+                                          {isTick && (
+                                            <span
+                                              style={{
+                                                fontSize: "0.68em",
+                                                color: colorObj?.text,
+                                                border: `1px solid ${colorObj?.border}`,
+                                                borderRadius: "3px",
+                                                padding: "1px 4px",
+                                                background: "rgba(0,0,0,0.25)",
+                                              }}
+                                            >
+                                              {colorObj?.label}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {r.detalle && (
+                                          <div
+                                            style={{
+                                              fontSize: "0.70rem",
+                                              color: "#94a3b8",
+                                              background: "rgba(255, 255, 255, 0.04)",
+                                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                                              borderRadius: "3px",
+                                              padding: "1px 5px",
+                                              width: "fit-content",
+                                            }}
+                                          >
+                                            📌 {r.detalle}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.descripcion || "—"}</td>
+                                    <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#a5b4fc", padding: "7px 10px" }}>
+                                      {r.cantidad}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : compararContra === "G2023" ? (
+                    /* PANEL DERECHO: GESTIÓN 2023 (3/2 AÑOS) */
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        background: "rgba(15, 23, 42, 0.5)",
+                        borderRadius: "10px",
+                        border: "1px solid rgba(16, 185, 129, 0.35)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {/* Header Panel Gestión 2023 */}
+                      <div
+                        style={{
+                          padding: "8px 16px",
+                          background: "rgba(16, 185, 129, 0.15)",
+                          borderBottom: "1px solid rgba(16, 185, 129, 0.3)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <Calendar size={16} color="#34d399" />
+                          <span style={{ fontWeight: 700, color: "#a7f3d0", fontSize: "0.85rem" }}>
+                            3. Gestión 2023 ({cargosGestion2023Ordenados.length} cargos)
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "0.7rem",
+                              padding: "1px 6px",
+                              borderRadius: "4px",
+                              background: totalG2023Marcados === cargosGestion2023.length ? "rgba(16, 185, 129, 0.25)" : "rgba(16, 185, 129, 0.15)",
+                              color: "#34d399",
+                              border: "1px solid rgba(16, 185, 129, 0.4)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            ✓ {totalG2023Marcados} / {cargosGestion2023.length} tickeados
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontSize: "0.74rem", color: "#6ee7b7", fontWeight: 700 }}>
+                            {totPlazasG2023} plazas totales
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Tabla Scrollable Gestión 2023 */}
+                      <div style={{ flex: 1, overflow: "auto" }}>
+                        <table className="custom-table" style={{ fontSize: "0.8rem", margin: 0 }}>
+                          <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
+                            <tr>
+                              <th style={{ width: "44px", textAlign: "center", padding: "8px 4px" }}>✓</th>
+                              <th style={{ width: "34px", textAlign: "center", padding: "8px 4px" }}>#</th>
+                              <th
+                                onClick={() => handleSortG2023("cargo")}
+                                style={{ cursor: "pointer", userSelect: "none" }}
+                              >
+                                Cargo Gestión 2023 {sortG2023Field === "cargo" && (sortG2023Order === "asc" ? "▲" : "▼")}
+                              </th>
+                              <th
+                                onClick={() => handleSortG2023("descripcion")}
+                                style={{ cursor: "pointer", userSelect: "none" }}
+                              >
+                                Especialidad / Área {sortG2023Field === "descripcion" && (sortG2023Order === "asc" ? "▲" : "▼")}
+                              </th>
+                              <th
+                                onClick={() => handleSortG2023("a3")}
+                                style={{ textAlign: "right", width: "65px", cursor: "pointer", userSelect: "none" }}
+                              >
+                                3 Años {sortG2023Field === "a3" && (sortG2023Order === "asc" ? "▲" : "▼")}
+                              </th>
+                              <th
+                                onClick={() => handleSortG2023("a2")}
+                                style={{ textAlign: "right", width: "65px", cursor: "pointer", userSelect: "none" }}
+                              >
+                                2 Años {sortG2023Field === "a2" && (sortG2023Order === "asc" ? "▲" : "▼")}
+                              </th>
+                              <th
+                                onClick={() => handleSortG2023("total")}
+                                style={{ textAlign: "right", width: "75px", cursor: "pointer", userSelect: "none" }}
+                              >
+                                Total {sortG2023Field === "total" && (sortG2023Order === "asc" ? "▲" : "▼")}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cargosGestion2023Ordenados.length === 0 ? (
+                              <tr>
+                                <td colSpan={7} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                                  {filtroCotejo === "FALTAN"
+                                    ? "¡Excelente! Ya has tickeado todos los cargos de Gestión 2023."
+                                    : "No se encontraron cargos de Gestión 2023 con el filtro aplicado."}
+                                </td>
+                              </tr>
+                            ) : (
+                              cargosGestion2023Ordenados.map((r, i) => {
+                                const a3 = r.anios_3 || 0;
+                                const a2 = r.anios_2 || 0;
+                                const tot = a3 + a2;
+                                const marca = marcasG2023[r._key];
+                                const isTick = !!marca?.tick;
+                                const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
+
+                                return (
+                                  <tr
+                                    key={r._key}
+                                    style={{
+                                      background: isTick ? colorObj?.bg : undefined,
+                                      borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                                      transition: "background 0.15s ease",
+                                    }}
+                                  >
+                                    <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleTickG2023(r._key)}
+                                          style={{
+                                            width: "18px",
+                                            height: "18px",
+                                            borderRadius: "4px",
+                                            border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                            background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            cursor: "pointer",
+                                            padding: 0,
+                                          }}
+                                          title={isTick ? "Desmarcar ítem" : "Tickear ítem con el color activo"}
+                                        >
+                                          {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                        </button>
+                                        {isTick && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => ciclarColorG2023(e, r._key)}
+                                            style={{
+                                              width: "12px",
+                                              height: "12px",
+                                              borderRadius: "50%",
+                                              background: colorObj?.hex,
+                                              border: "1px solid rgba(255,255,255,0.7)",
+                                              cursor: "pointer",
+                                              padding: 0,
+                                            }}
+                                            title={`Color: ${colorObj?.label}. Clic para cambiar de color`}
+                                          />
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ textAlign: "center", color: "#64748b", padding: "7px 4px" }}>{i + 1}</td>
+                                    <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9", padding: "7px 10px" }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span>{r.cargo_raw}</span>
+                                        {isTick && (
+                                          <span
+                                            style={{
+                                              fontSize: "0.68em",
+                                              color: colorObj?.text,
+                                              border: `1px solid ${colorObj?.border}`,
+                                              borderRadius: "3px",
+                                              padding: "1px 4px",
+                                              background: "rgba(0,0,0,0.25)",
+                                            }}
+                                          >
+                                            {colorObj?.label}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.descripcion || "—"}</td>
+                                    <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a3 > 0 ? "#93c5fd" : "#64748b", padding: "7px 10px" }}>
+                                      {a3 > 0 ? a3 : "—"}
+                                    </td>
+                                    <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a2 > 0 ? "#fde68a" : "#64748b", padding: "7px 10px" }}>
+                                      {a2 > 0 ? a2 : "—"}
+                                    </td>
+                                    <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#34d399", padding: "7px 10px" }}>
+                                      {tot}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    /* PANEL DERECHO: SIFMWEB (CARGOS AGRUPADOS Y PERSONAS) */
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        background: "rgba(15, 23, 42, 0.5)",
+                        borderRadius: "10px",
+                        border: "1px solid rgba(245, 158, 11, 0.35)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {/* Header Panel SIFMWEB */}
+                      <div
+                        style={{
+                          padding: "8px 16px",
+                          background: "rgba(245, 158, 11, 0.15)",
+                          borderBottom: "1px solid rgba(245, 158, 11, 0.3)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <Building2 size={16} color="#f59e0b" />
+                          <span style={{ fontWeight: 700, color: "#fde68a", fontSize: "0.85rem" }}>
+                            2. SIFMWEB ({cargosSifmOrdenados.length} cargos)
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "0.7rem",
+                              padding: "1px 6px",
+                              borderRadius: "4px",
+                              background: totalSifmMarcados === registrosSifmAgrupados.length ? "rgba(245, 158, 11, 0.3)" : "rgba(245, 158, 11, 0.15)",
+                              color: "#fbbf24",
+                              border: "1px solid rgba(245, 158, 11, 0.4)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            ✓ {totalSifmMarcados} / {registrosSifmAgrupados.length} tickeados
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontSize: "0.74rem", color: "#fde68a", fontWeight: 700 }}>
+                            {registrosSifm.length} personas registradas
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Tabla Scrollable SIFMWEB */}
+                      <div style={{ flex: 1, overflow: "auto" }}>
+                        <table className="custom-table" style={{ fontSize: "0.8rem", margin: 0 }}>
+                          <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
+                            <tr>
+                              <th style={{ width: "44px", textAlign: "center", padding: "8px 4px" }}>✓</th>
+                              <th style={{ width: "34px", textAlign: "center", padding: "8px 4px" }}>#</th>
+                              <th
+                                onClick={() => handleSortSifm("cargo")}
+                                style={{ cursor: "pointer", userSelect: "none" }}
+                              >
+                                Cargo SIFMWEB {sortSifmField === "cargo" && (sortSifmOrder === "asc" ? "▲" : "▼")}
+                              </th>
+                              <th
+                                onClick={() => handleSortSifm("tipo_cargo")}
+                                style={{ cursor: "pointer", userSelect: "none" }}
+                              >
+                                Tipo de Cargo {sortSifmField === "tipo_cargo" && (sortSifmOrder === "asc" ? "▲" : "▼")}
+                              </th>
+                              <th
+                                onClick={() => handleSortSifm("cantidad")}
+                                style={{ textAlign: "right", width: "85px", cursor: "pointer", userSelect: "none" }}
+                              >
+                                Personas {sortSifmField === "cantidad" && (sortSifmOrder === "asc" ? "▲" : "▼")}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cargosSifmOrdenados.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                                  {filtroCotejo === "FALTAN"
+                                    ? "¡Excelente! Ya has tickeado todos los cargos de SIFMWEB."
+                                    : "No se encontraron cargos de SIFMWEB con el filtro aplicado."}
+                                </td>
+                              </tr>
+                            ) : (
+                              cargosSifmOrdenados.map((r, i) => {
+                                const marca = marcasSifm[r._key];
+                                const isTick = !!marca?.tick;
+                                const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
+
+                                return (
+                                  <tr
+                                    key={r._key}
+                                    style={{
+                                      background: isTick ? colorObj?.bg : undefined,
+                                      borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                                    }}
+                                  >
+                                    <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleTickSifm(r._key)}
+                                          style={{
+                                            width: "18px",
+                                            height: "18px",
+                                            borderRadius: "4px",
+                                            border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                            background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            cursor: "pointer",
+                                            padding: 0,
+                                          }}
+                                        >
+                                          {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                        </button>
+                                        {isTick && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => ciclarColorSifm(e, r._key)}
+                                            style={{
+                                              width: "12px",
+                                              height: "12px",
+                                              borderRadius: "50%",
+                                              background: colorObj?.hex,
+                                              border: "1px solid rgba(255,255,255,0.7)",
+                                              cursor: "pointer",
+                                              padding: 0,
+                                            }}
+                                            title={`Color: ${colorObj?.label}. Clic para cambiar de color`}
+                                          />
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ textAlign: "center", color: "#64748b", padding: "7px 4px" }}>{i + 1}</td>
+                                    <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9", padding: "7px 10px" }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                         <span>{r.cargo}</span>
                                         {isTick && (
@@ -1813,35 +2757,20 @@ export const ControlTopesTab: React.FC<Props> = ({
                                           </span>
                                         )}
                                       </div>
-                                      {r.detalle && (
-                                        <div
-                                          style={{
-                                            fontSize: "0.70rem",
-                                            color: "#94a3b8",
-                                            background: "rgba(255, 255, 255, 0.04)",
-                                            border: "1px solid rgba(255, 255, 255, 0.08)",
-                                            borderRadius: "3px",
-                                            padding: "1px 5px",
-                                            width: "fit-content",
-                                          }}
-                                        >
-                                          📌 {r.detalle}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.descripcion || "—"}</td>
-                                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#a5b4fc", padding: "7px 10px" }}>
-                                    {r.cantidad}
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
+                                    </td>
+                                    <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.tipo_cargo || "—"}</td>
+                                    <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#f59e0b", padding: "7px 10px" }}>
+                                      {r.cantidad}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : tabModal === "CONVOCATORIA" ? (
                 /* ── VISTA COMPLETA SOLO CONVOCATORIA ── */
@@ -1959,7 +2888,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                     </tbody>
                   </table>
                 </div>
-              ) : (
+              ) : tabModal === "SEP" ? (
                 /* ── VISTA COMPLETA SOLO PLANILLA SEP ── */
                 <div style={{ flex: 1, overflow: "auto", border: "1px solid rgba(129, 140, 248, 0.3)", borderRadius: "8px" }}>
                   <table className="custom-table" style={{ fontSize: "0.82rem", margin: 0 }}>
@@ -2058,6 +2987,215 @@ export const ControlTopesTab: React.FC<Props> = ({
                     </tbody>
                   </table>
                 </div>
+              ) : tabModal === "G2023" ? (
+                /* ── VISTA COMPLETA SOLO GESTIÓN 2023 (3/2 AÑOS) ── */
+                <div style={{ flex: 1, overflow: "auto", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "8px" }}>
+                  <table className="custom-table" style={{ fontSize: "0.82rem", margin: 0 }}>
+                    <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
+                      <tr>
+                        <th style={{ width: "44px", textAlign: "center", padding: "10px 4px" }}>✓</th>
+                        <th style={{ width: "38px", textAlign: "center", padding: "10px 8px" }}>#</th>
+                        <th onClick={() => handleSortG2023("cargo")} style={{ cursor: "pointer", userSelect: "none" }}>
+                          Cargo Gestión 2023 {sortG2023Field === "cargo" && (sortG2023Order === "asc" ? "▲" : "▼")}
+                        </th>
+                        <th onClick={() => handleSortG2023("descripcion")} style={{ cursor: "pointer", userSelect: "none" }}>
+                          Especialidad / Área {sortG2023Field === "descripcion" && (sortG2023Order === "asc" ? "▲" : "▼")}
+                        </th>
+                        <th onClick={() => handleSortG2023("a3")} style={{ textAlign: "right", width: "85px", cursor: "pointer", userSelect: "none" }}>
+                          3 Años
+                        </th>
+                        <th onClick={() => handleSortG2023("a2")} style={{ textAlign: "right", width: "85px", cursor: "pointer", userSelect: "none" }}>
+                          2 Años
+                        </th>
+                        <th onClick={() => handleSortG2023("total")} style={{ textAlign: "right", width: "95px", cursor: "pointer", userSelect: "none" }}>
+                          Total Plazas
+                        </th>
+                        <th style={{ textAlign: "left", width: "160px" }}>Fuente / Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cargosGestion2023Ordenados.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                            {filtroCotejo === "FALTAN"
+                              ? "¡Excelente! Ya has tickeado todos los cargos de Gestión 2023."
+                              : "No se encontraron cargos de Gestión 2023 con el filtro aplicado."}
+                          </td>
+                        </tr>
+                      ) : (
+                        cargosGestion2023Ordenados.map((r, i) => {
+                          const a3 = r.anios_3 || 0;
+                          const a2 = r.anios_2 || 0;
+                          const tot = a3 + a2;
+                          const marca = marcasG2023[r._key];
+                          const isTick = !!marca?.tick;
+                          const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
+
+                          return (
+                            <tr
+                              key={r._key}
+                              style={{
+                                background: isTick ? colorObj?.bg : undefined,
+                                borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                              }}
+                            >
+                              <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleTickG2023(r._key)}
+                                    style={{
+                                      width: "18px",
+                                      height: "18px",
+                                      borderRadius: "4px",
+                                      border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                      background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      cursor: "pointer",
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                  </button>
+                                  {isTick && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => ciclarColorG2023(e, r._key)}
+                                      style={{
+                                        width: "12px",
+                                        height: "12px",
+                                        borderRadius: "50%",
+                                        background: colorObj?.hex,
+                                        border: "1px solid rgba(255,255,255,0.7)",
+                                        cursor: "pointer",
+                                        padding: 0,
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center", color: "#64748b" }}>{i + 1}</td>
+                              <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9" }}>
+                                {r.cargo_raw}
+                                {isTick && (
+                                  <span style={{ marginLeft: "6px", fontSize: "0.68em", color: colorObj?.text, border: `1px solid ${colorObj?.border}`, borderRadius: "3px", padding: "1px 4px" }}>
+                                    {colorObj?.label}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ color: "#cbd5e1" }}>{r.descripcion || "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a3 > 0 ? "#93c5fd" : "#64748b" }}>{a3 > 0 ? a3 : "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a2 > 0 ? "#fde68a" : "#64748b" }}>{a2 > 0 ? a2 : "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#34d399" }}>{tot}</td>
+                              <td style={{ fontSize: "0.75rem", color: "#94a3b8" }}>{r.detalle || r.fuente || "Gestión 2023"}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                /* ── VISTA COMPLETA SOLO SIFMWEB ── */
+                <div style={{ flex: 1, overflow: "auto", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "8px" }}>
+                  <table className="custom-table" style={{ fontSize: "0.82rem", margin: 0 }}>
+                    <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
+                      <tr>
+                        <th style={{ width: "44px", textAlign: "center", padding: "10px 4px" }}>✓</th>
+                        <th style={{ width: "38px", textAlign: "center", padding: "10px 8px" }}>#</th>
+                        <th onClick={() => handleSortSifm("cargo")} style={{ cursor: "pointer", userSelect: "none" }}>
+                          Cargo en SIFMWEB {sortSifmField === "cargo" && (sortSifmOrder === "asc" ? "▲" : "▼")}
+                        </th>
+                        <th onClick={() => handleSortSifm("tipo_cargo")} style={{ cursor: "pointer", userSelect: "none" }}>
+                          Tipo de Cargo / Categoría {sortSifmField === "tipo_cargo" && (sortSifmOrder === "asc" ? "▲" : "▼")}
+                        </th>
+                        <th onClick={() => handleSortSifm("cantidad")} style={{ textAlign: "right", width: "140px", cursor: "pointer", userSelect: "none" }}>
+                          Personas Asignadas {sortSifmField === "cantidad" && (sortSifmOrder === "asc" ? "▲" : "▼")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cargosSifmOrdenados.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                            {filtroCotejo === "FALTAN"
+                              ? "¡Excelente! Ya has tickeado todos los cargos de SIFMWEB."
+                              : "No se encontraron cargos de SIFMWEB con el filtro aplicado."}
+                          </td>
+                        </tr>
+                      ) : (
+                        cargosSifmOrdenados.map((r, i) => {
+                          const marca = marcasSifm[r._key];
+                          const isTick = !!marca?.tick;
+                          const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
+
+                          return (
+                            <tr
+                              key={r._key}
+                              style={{
+                                background: isTick ? colorObj?.bg : undefined,
+                                borderLeft: isTick ? `4px solid ${colorObj?.border}` : "4px solid transparent",
+                              }}
+                            >
+                              <td style={{ textAlign: "center", padding: "6px 4px", width: "44px" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleTickSifm(r._key)}
+                                    style={{
+                                      width: "18px",
+                                      height: "18px",
+                                      borderRadius: "4px",
+                                      border: isTick ? `1.5px solid ${colorObj?.border}` : "1.5px solid rgba(255,255,255,0.3)",
+                                      background: isTick ? colorObj?.hex : "rgba(255,255,255,0.05)",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      cursor: "pointer",
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {isTick && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                                  </button>
+                                  {isTick && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => ciclarColorSifm(e, r._key)}
+                                      style={{
+                                        width: "12px",
+                                        height: "12px",
+                                        borderRadius: "50%",
+                                        background: colorObj?.hex,
+                                        border: "1px solid rgba(255,255,255,0.7)",
+                                        cursor: "pointer",
+                                        padding: 0,
+                                      }}
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center", color: "#64748b" }}>{i + 1}</td>
+                              <td style={{ fontWeight: 600, color: isTick ? colorObj?.text : "#f1f5f9" }}>
+                                {r.cargo}
+                                {isTick && (
+                                  <span style={{ marginLeft: "6px", fontSize: "0.68em", color: colorObj?.text, border: `1px solid ${colorObj?.border}`, borderRadius: "3px", padding: "1px 4px" }}>
+                                    {colorObj?.label}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ color: "#cbd5e1" }}>{r.tipo_cargo || "—"}</td>
+                              <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: isTick ? colorObj?.text : "#f59e0b" }}>
+                                {r.cantidad}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
@@ -2072,15 +3210,21 @@ export const ControlTopesTab: React.FC<Props> = ({
                 borderTop: "1px solid var(--border-subtle)",
               }}
             >
-              <div style={{ display: "flex", gap: "18px", fontSize: "0.8rem", color: "#94a3b8" }}>
+              <div style={{ display: "flex", gap: "18px", fontSize: "0.8rem", color: "#94a3b8", flexWrap: "wrap" }}>
                 <span>
                   Convocatoria Oficial: <strong style={{ color: "#93c5fd" }}>{modalEsfm.convocadosTotal} plazas</strong> ({cargosConvocados.length} cargos)
                 </span>
                 <span>
                   Planilla SEP: <strong style={{ color: "#a5b4fc" }}>{modalEsfm.topeSEP} ítems</strong> ({cargosSepAgrupados.length} denominaciones)
                 </span>
+                <span>
+                  Gestión 2023: <strong style={{ color: "#34d399" }}>{totPlazasG2023} plazas</strong> ({cargosGestion2023.length} cargos)
+                </span>
+                <span>
+                  SIFMWEB: <strong style={{ color: "#fbbf24" }}>{registrosSifm.length} personas</strong> ({registrosSifmAgrupados.length} cargos)
+                </span>
                 <span style={{ color: modalEsfm.diferencia > 0 ? "var(--accent-rose)" : modalEsfm.diferencia < 0 ? "var(--accent-amber)" : "var(--accent-emerald)", fontWeight: 700 }}>
-                  Diferencia: {modalEsfm.diferencia > 0 ? `+${modalEsfm.diferencia}` : modalEsfm.diferencia}
+                  Diferencia vs SEP: {modalEsfm.diferencia > 0 ? `+${modalEsfm.diferencia}` : modalEsfm.diferencia}
                 </span>
               </div>
 

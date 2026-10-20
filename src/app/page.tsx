@@ -473,6 +473,7 @@ export default function Home() {
               convocatoriaRecords={dfs.publicacion_convocatoria || []}
               planillaSepRecords={dfs.planilla_sep || []}
               gestion2023Records={dfs.gestion_2023 || []}
+              sifmwebRecords={dfs.sifmweb || []}
               filtroDepto={filtroDepto}
               filtroEsfm={filtroEsfm}
               categoriaPersonal={configConvocatoria.categoriaPersonal}
