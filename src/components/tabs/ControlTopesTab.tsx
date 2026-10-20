@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { FilaControlTope, FilaComparativa } from "../../types";
+import { FilaControlTope, BaseRecord } from "../../types";
 import { exportarExcelTopes } from "../../lib/exportar";
+import { cumpleCategoriaPersonal } from "../../lib/comparador";
 import {
   Download,
   AlertOctagon,
@@ -21,12 +22,13 @@ import {
   X,
   Building2,
   Info,
-  Filter,
+  Columns,
 } from "lucide-react";
 
 interface Props {
   controlTopes: FilaControlTope[];
-  tabla?: FilaComparativa[];
+  convocatoriaRecords?: BaseRecord[];
+  planillaSepRecords?: BaseRecord[];
   filtroDepto: string;
   filtroEsfm: string;
   categoriaPersonal?: "DOCENTES" | "ADMINISTRATIVOS" | "SERVICIO" | "TODOS";
@@ -48,7 +50,8 @@ type Density = "compact" | "normal" | "large";
 
 export const ControlTopesTab: React.FC<Props> = ({
   controlTopes,
-  tabla = [],
+  convocatoriaRecords = [],
+  planillaSepRecords = [],
   filtroDepto,
   filtroEsfm,
   categoriaPersonal = "DOCENTES",
@@ -60,10 +63,19 @@ export const ControlTopesTab: React.FC<Props> = ({
   const [filtroTexto, setFiltroTexto] = useState<string>("");
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  // Estado para el modal de detalle de cargos por ESFM (al hacer clic en el ojo)
+  // Estados del modal de cargos por ESFM (al hacer clic en el ojo)
   const [modalEsfm, setModalEsfm] = useState<FilaControlTope | null>(null);
+  const [tabModal, setTabModal] = useState<"JUNTOS" | "CONVOCATORIA" | "SEP">("JUNTOS");
+  const [modoSep, setModoSep] = useState<"AGRUPADO" | "DETALLE">("AGRUPADO");
   const [filtroModalTexto, setFiltroModalTexto] = useState<string>("");
-  const [filtroModalEstado, setFiltroModalEstado] = useState<string>("TODOS");
+
+  // Ordenamiento independiente para Convocatoria
+  const [sortConvField, setSortConvField] = useState<string>("cargo");
+  const [sortConvOrder, setSortConvOrder] = useState<"asc" | "desc">("asc");
+
+  // Ordenamiento independiente para Planilla SEP
+  const [sortSepField, setSortSepField] = useState<string>("cantidad");
+  const [sortSepOrder, setSortSepOrder] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -108,6 +120,24 @@ export const ControlTopesTab: React.FC<Props> = ({
     }
   };
 
+  const handleSortConv = (field: string) => {
+    if (sortConvField === field) {
+      setSortConvOrder(sortConvOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortConvField(field);
+      setSortConvOrder("asc");
+    }
+  };
+
+  const handleSortSep = (field: string) => {
+    if (sortSepField === field) {
+      setSortSepOrder(sortSepOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortSepField(field);
+      setSortSepOrder(field === "cantidad" ? "desc" : "asc");
+    }
+  };
+
   const filtrados = useMemo(() => {
     const list = controlTopes.filter((r) => {
       if (filtroDepto && r.departamento !== filtroDepto) return false;
@@ -148,39 +178,162 @@ export const ControlTopesTab: React.FC<Props> = ({
   const totDif = totConv - totTope;
   const exceden = filtrados.filter((r) => r.diferencia > 0);
 
-  // Cargos pertenecientes a la institución seleccionada para el modal comparativo
-  const cargosDeInstitucion = useMemo(() => {
-    if (!modalEsfm || !tabla || tabla.length === 0) return [];
+  // Cargos convocados oficiales de la institución seleccionada
+  const cargosConvocados = useMemo(() => {
+    if (!modalEsfm || !convocatoriaRecords || convocatoriaRecords.length === 0) return [];
     const depTarget = modalEsfm.departamento.toUpperCase().trim();
-    const esfmKeyTarget = modalEsfm.esfm_key || "";
     const esfmRawTarget = modalEsfm.esfm.toUpperCase().trim();
+    const esfmKeyTarget = modalEsfm.esfm_key || "";
 
-    return tabla.filter((t) => {
-      if (t.departamento.toUpperCase().trim() !== depTarget) return false;
-      if (esfmKeyTarget && t.esfm_key === esfmKeyTarget) return true;
-      const tDisplay = t.esfm_display.toUpperCase().trim();
-      return tDisplay.includes(esfmRawTarget) || esfmRawTarget.includes(tDisplay);
+    return convocatoriaRecords.filter((r) => {
+      if (r.departamento.toUpperCase().trim() !== depTarget) return false;
+      if (!cumpleCategoriaPersonal(r, categoriaPersonal)) return false;
+      if (esfmKeyTarget && r.esfm_key === esfmKeyTarget) return true;
+      const raw = (r.esfm_raw || "").toUpperCase().trim();
+      return raw.includes(esfmRawTarget) || esfmRawTarget.includes(raw);
     });
-  }, [tabla, modalEsfm]);
+  }, [modalEsfm, convocatoriaRecords, categoriaPersonal]);
 
-  const cargosFiltradosModal = useMemo(() => {
-    return cargosDeInstitucion.filter((c) => {
+  // Ítems en planilla SEP de la institución seleccionada
+  const cargosSep = useMemo(() => {
+    if (!modalEsfm || !planillaSepRecords || planillaSepRecords.length === 0) return [];
+    const depTarget = modalEsfm.departamento.toUpperCase().trim();
+    const esfmRawTarget = modalEsfm.esfm.toUpperCase().trim();
+    const esfmKeyTarget = modalEsfm.esfm_key || "";
+
+    return planillaSepRecords.filter((r) => {
+      if (r.departamento.toUpperCase().trim() !== depTarget) return false;
+      if (!cumpleCategoriaPersonal(r, categoriaPersonal)) return false;
+      if (esfmKeyTarget && r.esfm_key === esfmKeyTarget) return true;
+      const raw = (r.esfm_raw || "").toUpperCase().trim();
+      return raw.includes(esfmRawTarget) || esfmRawTarget.includes(raw);
+    });
+  }, [modalEsfm, planillaSepRecords, categoriaPersonal]);
+
+  // Cargos SEP agrupados por denominación de cargo
+  const cargosSepAgrupados = useMemo(() => {
+    const map = new Map<string, { cargo: string; descripcion: string; cantidad: number }>();
+    for (const r of cargosSep) {
+      const c = r.cargo_raw || "SIN CARGO";
+      const d = r.descripcion || "";
+      const key = `${c}___${d}`;
+      const item = map.get(key);
+      if (!item) {
+        map.set(key, { cargo: c, descripcion: d, cantidad: 1 });
+      } else {
+        item.cantidad += 1;
+      }
+    }
+    return Array.from(map.values());
+  }, [cargosSep]);
+
+  // Lista ordenada de Convocatoria Oficial
+  const cargosConvocadosOrdenados = useMemo(() => {
+    let list = cargosConvocados.filter((r) => {
       if (filtroModalTexto) {
         const txt = filtroModalTexto.toLowerCase().trim();
-        const mCargo = (c.cargo_display || c.cargo_key || "").toLowerCase().includes(txt);
-        const mDesc = (c.descripcion_cargo || "").toLowerCase().includes(txt);
-        const mDiag = (c.diagnostico || "").toLowerCase().includes(txt);
-        if (!mCargo && !mDesc && !mDiag) return false;
+        const mCargo = (r.cargo_raw || "").toLowerCase().includes(txt);
+        const mDesc = (r.descripcion || "").toLowerCase().includes(txt);
+        const mDet = (r.detalle || "").toLowerCase().includes(txt);
+        if (!mCargo && !mDesc && !mDet) return false;
       }
-      const cSep = c.cant_sep ?? 0;
-      const cConv = c.items_convocatoria ?? 0;
-      if (filtroModalEstado === "AMBOS" && (cSep === 0 || cConv === 0)) return false;
-      if (filtroModalEstado === "SOLO_SEP" && (cSep === 0 || cConv > 0)) return false;
-      if (filtroModalEstado === "SOLO_CONV" && (cConv === 0 || cSep > 0)) return false;
-      if (filtroModalEstado === "DIFERENCIA" && cConv === cSep) return false;
       return true;
     });
-  }, [cargosDeInstitucion, filtroModalTexto, filtroModalEstado]);
+
+    list.sort((a, b) => {
+      let va: any = "";
+      let vb: any = "";
+      if (sortConvField === "cargo") {
+        va = a.cargo_raw || "";
+        vb = b.cargo_raw || "";
+      } else if (sortConvField === "descripcion") {
+        va = a.descripcion || "";
+        vb = b.descripcion || "";
+      } else if (sortConvField === "a3") {
+        va = a.anios_3 || 0;
+        vb = b.anios_3 || 0;
+      } else if (sortConvField === "a2") {
+        va = a.anios_2 || 0;
+        vb = b.anios_2 || 0;
+      } else if (sortConvField === "a1") {
+        va = a.anios_1 || 0;
+        vb = b.anios_1 || 0;
+      } else if (sortConvField === "total") {
+        va = (a.anios_3 || 0) + (a.anios_2 || 0) + (a.anios_1 || 0) || 1;
+        vb = (b.anios_3 || 0) + (b.anios_2 || 0) + (b.anios_1 || 0) || 1;
+      }
+      if (typeof va === "string") {
+        const cmp = va.localeCompare(vb);
+        return sortConvOrder === "asc" ? cmp : -cmp;
+      }
+      return sortConvOrder === "asc" ? va - vb : vb - va;
+    });
+
+    return list;
+  }, [cargosConvocados, filtroModalTexto, sortConvField, sortConvOrder]);
+
+  // Lista ordenada de Planilla SEP
+  const cargosSepOrdenados = useMemo(() => {
+    if (modoSep === "AGRUPADO") {
+      let list = cargosSepAgrupados.filter((r) => {
+        if (filtroModalTexto) {
+          const txt = filtroModalTexto.toLowerCase().trim();
+          const mCargo = (r.cargo || "").toLowerCase().includes(txt);
+          const mDesc = (r.descripcion || "").toLowerCase().includes(txt);
+          if (!mCargo && !mDesc) return false;
+        }
+        return true;
+      });
+
+      list.sort((a, b) => {
+        let va: any = "";
+        let vb: any = "";
+        if (sortSepField === "cargo") {
+          va = a.cargo || "";
+          vb = b.cargo || "";
+        } else if (sortSepField === "descripcion") {
+          va = a.descripcion || "";
+          vb = b.descripcion || "";
+        } else if (sortSepField === "cantidad" || sortSepField === "total") {
+          va = a.cantidad || 0;
+          vb = b.cantidad || 0;
+        }
+        if (typeof va === "string") {
+          const cmp = va.localeCompare(vb);
+          return sortSepOrder === "asc" ? cmp : -cmp;
+        }
+        return sortSepOrder === "asc" ? va - vb : vb - va;
+      });
+      return list;
+    } else {
+      let list = cargosSep.filter((r) => {
+        if (filtroModalTexto) {
+          const txt = filtroModalTexto.toLowerCase().trim();
+          const mCargo = (r.cargo_raw || "").toLowerCase().includes(txt);
+          const mDesc = (r.descripcion || "").toLowerCase().includes(txt);
+          if (!mCargo && !mDesc) return false;
+        }
+        return true;
+      });
+
+      list.sort((a, b) => {
+        let va: any = a.cargo_raw || "";
+        let vb: any = b.cargo_raw || "";
+        if (sortSepField === "descripcion") {
+          va = a.descripcion || "";
+          vb = b.descripcion || "";
+        }
+        const cmp = String(va).localeCompare(String(vb));
+        return sortSepOrder === "asc" ? cmp : -cmp;
+      });
+      return list.map((r, i) => ({
+        cargo: r.cargo_raw || "SIN CARGO",
+        descripcion: r.descripcion || "",
+        cantidad: 1,
+        detalle: r.detalle,
+      }));
+    }
+  }, [cargosSep, cargosSepAgrupados, modoSep, filtroModalTexto, sortSepField, sortSepOrder]);
 
   // Variables de densidad / tamaño
   const configDensidad = {
@@ -198,195 +351,150 @@ export const ControlTopesTab: React.FC<Props> = ({
     },
   }[densidad];
 
-  const renderHeader = (
-    label: string,
-    field: SortField,
-    align: "left" | "right" | "center" = "left",
-    width?: string
-  ) => {
-    const isActivo = sortField === field;
-    return (
-      <th
-        onClick={() => handleSort(field)}
-        style={{
-          textAlign: align,
-          cursor: "pointer",
-          userSelect: "none",
-          padding: configDensidad.cellPadding,
-          width,
-          color: isActivo ? "#60a5fa" : undefined,
-          background: isActivo ? "rgba(59, 130, 246, 0.08)" : undefined,
-        }}
-        title={`Clic para ordenar por ${label} (${isActivo && sortOrder === "asc" ? "Descendente" : "Ascendente"})`}
-      >
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            justifyContent:
-              align === "right"
-                ? "flex-end"
-                : align === "center"
-                  ? "center"
-                  : "flex-start",
-            width: "100%",
-          }}
-        >
-          <span>{label}</span>
-          {isActivo ? (
-            sortOrder === "asc" ? (
-              <ArrowUp size={13} color="#60a5fa" />
-            ) : (
-              <ArrowDown size={13} color="#60a5fa" />
-            )
-          ) : (
-            <ArrowUpDown size={12} color="#64748b" style={{ opacity: 0.5 }} />
-          )}
-        </div>
-      </th>
-    );
-  };
+  const renderHeader = (label: string, field: SortField, align: "left" | "right" | "center" = "left") => (
+    <th
+      onClick={() => handleSort(field)}
+      style={{
+        textAlign: align,
+        cursor: "pointer",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        padding: configDensidad.cellPadding,
+      }}
+      title={`Ordenar por ${label}`}
+    >
+      <div style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        justifyContent: align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start",
+        width: "100%",
+      }}>
+        <span>{label}</span>
+        {sortField === field ? (
+          sortOrder === "asc" ? <ArrowUp size={13} color="var(--accent-blue)" /> : <ArrowDown size={13} color="var(--accent-blue)" />
+        ) : (
+          <ArrowUpDown size={12} color="#64748b" style={{ opacity: 0.6 }} />
+        )}
+      </div>
+    </th>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <div>
-        <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "10px" }}>
-          <Target size={20} color="var(--accent-blue)" />
-          Control de Topes de {labelCat} (Planilla SEP vs Convocatoria Oficial)
-        </h3>
-        <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
-          La Planilla SEP (PLA0926_DGFM estado=1) establece el tope presupuestario asignado. Este módulo compara con la Convocatoria Oficial según la categoría seleccionada ({labelCat.toLowerCase()}) y permite ajustar años (3a, 2a, 1a) e inamovilidades.
-        </p>
+      {/* Encabezado y Acción de Exportar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#ffffff", display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
+            <Target size={22} color="var(--accent-blue)" />
+            Control de Topes Presupuestarios (Planilla SEP vs Convocatoria Oficial)
+          </h3>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
+            Comparación oficial de plazas asignadas en Planilla SEP contra plazas publicadas en Convocatoria Oficial ({labelCat}).
+          </p>
+        </div>
+
+        <button onClick={() => exportarExcelTopes(filtrados)} className="btn-primary">
+          <Download size={16} />
+          Exportar Control de Topes
+        </button>
       </div>
 
-      {/* KPI Topes */}
+      {/* KPI Cards */}
       <div className="metrics-grid">
         <div className="metric-card">
-          <div className="title">Tope {labelCat} (Planilla SEP)</div>
-          <div className="val">{totTope.toLocaleString()}</div>
+          <div className="title">Tope Planilla SEP</div>
+          <div className="val" style={{ color: "var(--accent-blue)" }}>{totTope.toLocaleString()}</div>
           <span className="badge badge-blue">Techo Presupuestario</span>
         </div>
+
         <div className="metric-card">
-          <div className="title">{labelCat} Convocados (Total)</div>
-          <div className="val">{totConv.toLocaleString()}</div>
+          <div className="title">Convocados Oficiales</div>
+          <div className="val" style={{ color: "#93c5fd" }}>{totConv.toLocaleString()}</div>
           <span className="badge badge-green">
             3a: {tot3a} | 2a: {tot2a} | 1a: {tot1a}
           </span>
         </div>
+
         <div className="metric-card">
-          <div className="title">Diferencia Neta</div>
+          <div className="title">Diferencia Neta Global</div>
           <div className="val" style={{ color: totDif > 0 ? "var(--accent-rose)" : totDif < 0 ? "var(--accent-amber)" : "var(--accent-emerald)" }}>
             {totDif > 0 ? `+${totDif.toLocaleString()}` : totDif.toLocaleString()}
           </div>
           <span className={`badge ${totDif > 0 ? "badge-red" : totDif < 0 ? "badge-yellow" : "badge-green"}`}>
-            {totDif > 0 ? "Sobregiro" : totDif < 0 ? "Plazas Disponibles" : "Cuadre Exacto"}
+            {totDif > 0 ? "Sobregiro Presupuestario" : totDif < 0 ? "Capacidad Disponible" : "Cuadre Exacto"}
           </span>
         </div>
+
         <div className="metric-card">
-          <div className="title">{labelCat} con Inamovilidad</div>
-          <div className="val" style={{ color: "#f59e0b" }}>{totInam}</div>
-          <span className="badge badge-yellow">Observación Funcionaria</span>
+          <div className="title">Inamovilidades</div>
+          <div className="val" style={{ color: "var(--accent-amber)" }}>{totInam.toLocaleString()}</div>
+          <span className="badge badge-yellow">Plazas Protegidas</span>
         </div>
       </div>
 
-      {/* Banner de Alerta si hay instituciones excediendo el tope */}
+      {/* Alerta de Sobregiros si existen */}
       {exceden.length > 0 && (
         <div style={{
           background: "rgba(239, 68, 68, 0.12)",
           border: "1px solid rgba(239, 68, 68, 0.4)",
           borderRadius: "var(--radius-md)",
-          padding: "16px 20px",
+          padding: "12px 18px",
           display: "flex",
-          gap: "14px",
-          alignItems: "flex-start",
+          alignItems: "center",
+          gap: "12px",
         }}>
-          <AlertOctagon size={24} color="#ef4444" style={{ flexShrink: 0, marginTop: "2px" }} />
+          <AlertOctagon size={22} color="var(--accent-rose)" style={{ flexShrink: 0 }} />
           <div>
-            <h4 style={{ color: "#fca5a5", fontSize: "0.95rem", fontWeight: 700 }}>
-              ALERTA PRESUPUESTARIA: Se detectaron {exceden.length} ESFM/UA convocando MÁS plazas de las permitidas por su tope en Planilla SEP.
-            </h4>
-            <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {exceden.map((e, idx) => (
-                <span key={idx} className="badge badge-red">
-                  {e.esfm} (+{e.diferencia})
-                </span>
-              ))}
+            <div style={{ fontWeight: 700, color: "var(--accent-rose)", fontSize: "0.9rem" }}>
+              Alerta de Sobregiro Presupuestario: {exceden.length} {exceden.length === 1 ? "institución sobrepasa" : "instituciones sobrepasan"} el tope SEP asignado
+            </div>
+            <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "2px" }}>
+              Instituciones con exceso: {exceden.map((e) => `${e.esfm} (+${e.diferencia})`).join(", ")}
             </div>
           </div>
         </div>
       )}
 
-      {/* Filtros de Estado Presupuestario y Descarga */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", borderTop: "1px solid var(--border-subtle)", paddingTop: "14px" }}>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+      {/* Filtros de Estado */}
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 600 }}>Filtrar Estado:</span>
+        {[
+          { id: "TODOS", label: "Todas las ESFM / UA" },
+          { id: "EXCEDE", label: "Solo Sobregiro (Exceden Tope)" },
+          { id: "FALTA", label: "Solo con Plazas Disponibles (Faltan)" },
+          { id: "CUADRE", label: "Solo Cuadre Exacto" },
+        ].map((f) => (
           <button
-            onClick={() => setFiltroEstado("TODOS")}
-            className={`btn-secondary ${filtroEstado === "TODOS" ? "active" : ""}`}
+            key={f.id}
+            onClick={() => setFiltroEstado(f.id)}
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              ...(filtroEstado === "TODOS" ? { borderColor: "var(--accent-blue)", background: "rgba(59, 130, 246, 0.2)" } : {})
+              padding: "6px 12px",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              border: "1px solid",
+              background: filtroEstado === f.id ? "var(--accent-blue)" : "rgba(31, 41, 55, 0.6)",
+              borderColor: filtroEstado === f.id ? "var(--accent-blue)" : "var(--border-subtle)",
+              color: filtroEstado === f.id ? "#ffffff" : "var(--text-muted)",
+              transition: "all 0.15s ease",
             }}
           >
-            <Layers size={14} />
-            Todos ({controlTopes.length})
+            {f.label}
           </button>
-          <button
-            onClick={() => setFiltroEstado("EXCEDE")}
-            className="btn-secondary"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              ...(filtroEstado === "EXCEDE" ? { borderColor: "var(--accent-rose)", background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5" } : {})
-            }}
-          >
-            <AlertTriangle size={14} color="#ef4444" />
-            Excede Tope ({controlTopes.filter((r) => r.diferencia > 0).length})
-          </button>
-          <button
-            onClick={() => setFiltroEstado("FALTA")}
-            className="btn-secondary"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              ...(filtroEstado === "FALTA" ? { borderColor: "var(--accent-amber)", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" } : {})
-            }}
-          >
-            <Clock size={14} color="#f59e0b" />
-            Faltan por Convocar ({controlTopes.filter((r) => r.diferencia < 0).length})
-          </button>
-          <button
-            onClick={() => setFiltroEstado("CUADRE")}
-            className="btn-secondary"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              ...(filtroEstado === "CUADRE" ? { borderColor: "var(--accent-emerald)", background: "rgba(16, 185, 129, 0.2)", color: "#a7f3d0" } : {})
-            }}
-          >
-            <CheckCircle2 size={14} color="#10b981" />
-            Cuadre Exacto ({controlTopes.filter((r) => r.diferencia === 0).length})
-          </button>
-        </div>
-
-        <button
-          onClick={() => exportarExcelTopes(filtrados)}
-          className="btn-primary"
-        >
-          <Download size={16} />
-          Descargar Reporte en Excel
-        </button>
+        ))}
       </div>
 
-      {/* Contenedor Expandible: Pantalla Completa Panorámica o Flujo Normal */}
+      {/* Contenedor Principal de la Tabla */}
       <div
-        style={
-          isFullscreen
+        className={isFullscreen ? "fullscreen-table-overlay" : "glass-panel"}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          padding: isFullscreen ? "18px 24px" : "16px",
+          ...(isFullscreen
             ? {
               position: "fixed",
               top: 0,
@@ -397,55 +505,26 @@ export const ControlTopesTab: React.FC<Props> = ({
               height: "100vh",
               zIndex: 999999,
               background: "#080d1a",
-              padding: "20px 28px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "14px",
-              boxSizing: "border-box",
               overflow: "hidden",
             }
-            : {
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
-            }
-        }
+            : {}),
+        }}
       >
-        {/* Cabecera especial visible únicamente en modo Pantalla Completa */}
         {isFullscreen && (
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              borderBottom: "1px solid rgba(59, 130, 246, 0.3)",
               paddingBottom: "10px",
-              borderBottom: "1px solid var(--border-subtle)",
             }}
           >
-            <div>
-              <h3
-                style={{
-                  fontSize: "1.15rem",
-                  fontWeight: 700,
-                  color: "#ffffff",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  margin: 0,
-                }}
-              >
-                <Target size={22} color="var(--accent-blue)" />
-                Control de Topes de {labelCat} — Pantalla Completa
-              </h3>
-              <p
-                style={{
-                  color: "var(--text-muted)",
-                  fontSize: "0.8rem",
-                  margin: "4px 0 0 0",
-                }}
-              >
-                Visualización panorámica total ({filtrados.length} registros). Presione la tecla <kbd style={{ background: "#1f2937", padding: "2px 6px", borderRadius: "4px", border: "1px solid #374151" }}>ESC</kbd> o el botón para salir.
-              </p>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <Target size={20} color="var(--accent-blue)" />
+              <span style={{ fontWeight: 700, fontSize: "1.1rem", color: "#ffffff" }}>
+                Control de Topes Presupuestarios — Vista Pantalla Completa
+              </span>
             </div>
 
             <button
@@ -472,7 +551,7 @@ export const ControlTopesTab: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Barra de Controles: Buscador Rápido y Selector de Tamaño de Tabla */}
+        {/* Barra de Controles: Buscador Rápido y Selector de Tamaño */}
         <div
           style={{
             display: "flex",
@@ -486,7 +565,6 @@ export const ControlTopesTab: React.FC<Props> = ({
             padding: "10px 14px",
           }}
         >
-          {/* Buscador Rápido dentro de la tabla */}
           <div style={{ position: "relative", minWidth: "240px", flex: "1", maxWidth: "380px" }}>
             <Search size={15} color="#9ca3af" style={{ position: "absolute", left: "10px", top: "10px" }} />
             <input
@@ -499,7 +577,6 @@ export const ControlTopesTab: React.FC<Props> = ({
             />
           </div>
 
-          {/* Controles de Tamaño / Densidad y Zoom */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 500 }}>
               Tamaño de Tabla:
@@ -518,7 +595,6 @@ export const ControlTopesTab: React.FC<Props> = ({
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                 }}
-                title="Vista Compacta: más filas en pantalla"
               >
                 Compacta
               </button>
@@ -535,7 +611,6 @@ export const ControlTopesTab: React.FC<Props> = ({
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                 }}
-                title="Vista Normal"
               >
                 Normal
               </button>
@@ -552,7 +627,6 @@ export const ControlTopesTab: React.FC<Props> = ({
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                 }}
-                title="Vista Amplia / Grande: texto agrandado para lectura cómoda"
               >
                 Grande
               </button>
@@ -614,7 +688,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                 {renderHeader("Diferencia", "diferencia", "right")}
                 {renderHeader("Estado", "estado", "center")}
                 <th style={{ textAlign: "center", width: "120px", padding: configDensidad.cellPadding, color: "#93c5fd" }}>
-                  Comparativa
+                  Ver Cargos
                 </th>
               </tr>
             </thead>
@@ -669,17 +743,21 @@ export const ControlTopesTab: React.FC<Props> = ({
                       <button
                         onClick={() => {
                           setModalEsfm(row);
+                          setTabModal("JUNTOS");
                           setFiltroModalTexto("");
-                          setFiltroModalEstado("TODOS");
+                          setSortConvField("cargo");
+                          setSortConvOrder("asc");
+                          setSortSepField("cantidad");
+                          setSortSepOrder("desc");
                         }}
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "6px",
-                          padding: "5px 11px",
+                          padding: "5px 12px",
                           borderRadius: "6px",
-                          background: "rgba(59, 130, 246, 0.16)",
-                          border: "1px solid rgba(59, 130, 246, 0.45)",
+                          background: "rgba(59, 130, 246, 0.18)",
+                          border: "1px solid rgba(59, 130, 246, 0.5)",
                           color: "#93c5fd",
                           fontSize: "0.76rem",
                           fontWeight: 600,
@@ -687,7 +765,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                           transition: "all 0.15s ease",
                           boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
                         }}
-                        title={`Ver comparación de cargos para ${row.esfm}`}
+                        title={`Ver cargos de ${row.esfm}`}
                       >
                         <Eye size={13} color="#60a5fa" />
                         <span>Ver Cargos</span>
@@ -701,19 +779,19 @@ export const ControlTopesTab: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* ── MODAL DE COMPARACIÓN DETALLADA DE CARGOS (SEP VS CONVOCATORIA) ── */}
+      {/* ── MODAL DINÁMICO: VISTA JUNTOS / LADO A LADO DE CARGOS ── */}
       {modalEsfm && (
         <div
           style={{
             position: "fixed",
             inset: 0,
             zIndex: 9999999,
-            background: "rgba(3, 7, 18, 0.82)",
-            backdropFilter: "blur(8px)",
+            background: "rgba(3, 7, 18, 0.88)",
+            backdropFilter: "blur(10px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "20px",
+            padding: "16px",
             animation: "fadeIn 0.2s ease-out",
           }}
           onClick={(e) => {
@@ -723,14 +801,15 @@ export const ControlTopesTab: React.FC<Props> = ({
           <div
             style={{
               width: "100%",
-              maxWidth: "1150px",
-              maxHeight: "92vh",
+              maxWidth: "1350px",
+              height: "92vh",
+              maxHeight: "95vh",
               display: "flex",
               flexDirection: "column",
               background: "#0c1322",
-              border: "1px solid rgba(59, 130, 246, 0.4)",
+              border: "1px solid rgba(59, 130, 246, 0.45)",
               borderRadius: "14px",
-              boxShadow: "0 25px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(59, 130, 246, 0.15)",
+              boxShadow: "0 25px 60px rgba(0, 0, 0, 0.95), 0 0 35px rgba(59, 130, 246, 0.2)",
               overflow: "hidden",
             }}
           >
@@ -739,17 +818,17 @@ export const ControlTopesTab: React.FC<Props> = ({
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "flex-start",
-                padding: "18px 24px",
-                background: "rgba(17, 24, 39, 0.9)",
+                alignItems: "center",
+                padding: "14px 22px",
+                background: "rgba(17, 24, 39, 0.95)",
                 borderBottom: "1px solid var(--border-subtle)",
-                gap: "16px",
+                gap: "14px",
               }}
             >
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <Building2 size={20} color="var(--accent-blue)" />
-                  <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700, color: "#ffffff" }}>
+                  <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700, color: "#ffffff" }}>
                     {modalEsfm.esfm}
                   </h3>
                   <span
@@ -766,8 +845,8 @@ export const ControlTopesTab: React.FC<Props> = ({
                     {modalEsfm.departamento}
                   </span>
                 </div>
-                <p style={{ margin: "4px 0 0 0", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  Comparación detallada cargo por cargo: <strong>Planilla SEP (Tope)</strong> vs <strong>Convocatoria Oficial ({labelCat})</strong>
+                <p style={{ margin: "2px 0 0 0", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                  Comparación visual de cargos ({labelCat}): consulta y ordena directamente ambas fuentes para ver cuál corresponde a cuál.
                 </p>
               </div>
 
@@ -791,230 +870,459 @@ export const ControlTopesTab: React.FC<Props> = ({
               </button>
             </div>
 
-            {/* KPIs Resumen de la Institución */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                gap: "12px",
-                padding: "14px 24px",
-                background: "rgba(15, 23, 42, 0.5)",
-                borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-              }}
-            >
-              <div style={{ background: "rgba(17, 24, 39, 0.7)", border: "1px solid rgba(129, 140, 248, 0.3)", borderRadius: "8px", padding: "10px 14px" }}>
-                <div style={{ fontSize: "0.72rem", color: "#94a3b8", fontWeight: 600 }}>Tope Planilla SEP</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#a5b4fc", fontFamily: "var(--font-mono, monospace)" }}>
-                  {modalEsfm.topeSEP} <span style={{ fontSize: "0.75rem", fontWeight: 400, color: "#94a3b8" }}>ítems</span>
-                </div>
-              </div>
-
-              <div style={{ background: "rgba(17, 24, 39, 0.7)", border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: "8px", padding: "10px 14px" }}>
-                <div style={{ fontSize: "0.72rem", color: "#94a3b8", fontWeight: 600 }}>Convocatoria Oficial</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#93c5fd", fontFamily: "var(--font-mono, monospace)" }}>
-                  {modalEsfm.convocadosTotal} <span style={{ fontSize: "0.72rem", fontWeight: 400, color: "#94a3b8" }}>(3a: {modalEsfm.anios3} | 2a: {modalEsfm.anios2} | 1a: {modalEsfm.anios1})</span>
-                </div>
-              </div>
-
-              <div style={{
-                background: "rgba(17, 24, 39, 0.7)",
-                border: "1px solid",
-                borderColor: modalEsfm.diferencia > 0 ? "rgba(244, 63, 94, 0.3)" : modalEsfm.diferencia < 0 ? "rgba(245, 158, 11, 0.3)" : "rgba(16, 185, 129, 0.3)",
-                borderRadius: "8px",
-                padding: "10px 14px",
-              }}>
-                <div style={{ fontSize: "0.72rem", color: "#94a3b8", fontWeight: 600 }}>Balance / Diferencia</div>
-                <div style={{
-                  fontSize: "1.3rem",
-                  fontWeight: 700,
-                  fontFamily: "var(--font-mono, monospace)",
-                  color: modalEsfm.diferencia > 0 ? "var(--accent-rose)" : modalEsfm.diferencia < 0 ? "var(--accent-amber)" : "var(--accent-emerald)",
-                }}>
-                  {modalEsfm.diferencia > 0 ? `+${modalEsfm.diferencia}` : modalEsfm.diferencia}
-                  <span style={{ fontSize: "0.72rem", fontWeight: 500, marginLeft: "6px" }}>
-                    {modalEsfm.diferencia > 0 ? "(Excede)" : modalEsfm.diferencia < 0 ? "(Faltan por convocar)" : "(Cuadre Exacto)"}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ background: "rgba(17, 24, 39, 0.7)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "8px", padding: "10px 14px" }}>
-                <div style={{ fontSize: "0.72rem", color: "#94a3b8", fontWeight: 600 }}>Inamovilidad</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: modalEsfm.inamovilidadDocente > 0 ? "#f59e0b" : "#94a3b8", fontFamily: "var(--font-mono, monospace)" }}>
-                  {modalEsfm.inamovilidadDocente > 0 ? `${modalEsfm.inamovilidadDocente} protegida(s)` : "—"}
-                </div>
-              </div>
-            </div>
-
-            {/* Barra de Filtros del Modal */}
+            {/* Pestañas de Vista y Buscador Global */}
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
                 alignItems: "center",
+                justifyContent: "space-between",
                 flexWrap: "wrap",
                 gap: "12px",
-                padding: "12px 24px",
-                background: "rgba(17, 24, 39, 0.6)",
-                borderBottom: "1px solid var(--border-subtle)",
+                padding: "10px 22px",
+                background: "rgba(15, 23, 42, 0.7)",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
               }}
             >
-              {/* Buscador de cargo */}
-              <div style={{ position: "relative", minWidth: "260px", flex: 1, maxWidth: "420px" }}>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <button
+                  onClick={() => setTabModal("JUNTOS")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: "1.5px solid",
+                    background: tabModal === "JUNTOS" ? "var(--accent-blue)" : "rgba(31, 41, 55, 0.5)",
+                    borderColor: tabModal === "JUNTOS" ? "var(--accent-blue)" : "var(--border-subtle)",
+                    color: tabModal === "JUNTOS" ? "#ffffff" : "#94a3b8",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <Columns size={14} />
+                  Vista Paralela (Juntos Lado a Lado)
+                </button>
+
+                <button
+                  onClick={() => setTabModal("CONVOCATORIA")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: tabModal === "CONVOCATORIA" ? "var(--accent-blue)" : "rgba(31, 41, 55, 0.5)",
+                    borderColor: tabModal === "CONVOCATORIA" ? "var(--accent-blue)" : "var(--border-subtle)",
+                    color: tabModal === "CONVOCATORIA" ? "#ffffff" : "#94a3b8",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  Solo Convocatoria ({cargosConvocados.length})
+                </button>
+
+                <button
+                  onClick={() => setTabModal("SEP")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    background: tabModal === "SEP" ? "#6366f1" : "rgba(31, 41, 55, 0.5)",
+                    borderColor: tabModal === "SEP" ? "#6366f1" : "var(--border-subtle)",
+                    color: tabModal === "SEP" ? "#ffffff" : "#94a3b8",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  Solo Planilla SEP ({cargosSep.length})
+                </button>
+              </div>
+
+              {/* Buscador Rápido */}
+              <div style={{ position: "relative", minWidth: "260px", maxWidth: "340px" }}>
                 <Search size={14} color="#9ca3af" style={{ position: "absolute", left: "10px", top: "9px" }} />
                 <input
                   type="text"
-                  placeholder="Buscar cargo o especialidad..."
+                  placeholder="Buscar cargo en ambas tablas..."
                   value={filtroModalTexto}
                   onChange={(e) => setFiltroModalTexto(e.target.value)}
                   className="form-input"
                   style={{ paddingLeft: "32px", fontSize: "0.8rem", width: "100%", padding: "6px 10px 6px 32px" }}
                 />
               </div>
-
-              {/* Botones de filtro por estado */}
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {[
-                  { id: "TODOS", label: `Todos (${cargosDeInstitucion.length})` },
-                  { id: "AMBOS", label: "SEP y Convocatoria" },
-                  { id: "SOLO_SEP", label: "Solo en SEP" },
-                  { id: "SOLO_CONV", label: "Solo en Convocatoria" },
-                  { id: "DIFERENCIA", label: "Con Diferencia" },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => setFiltroModalEstado(f.id)}
-                    style={{
-                      padding: "5px 10px",
-                      borderRadius: "6px",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      border: "1px solid",
-                      background: filtroModalEstado === f.id ? "var(--accent-blue)" : "rgba(31, 41, 55, 0.6)",
-                      borderColor: filtroModalEstado === f.id ? "var(--accent-blue)" : "var(--border-subtle)",
-                      color: filtroModalEstado === f.id ? "#ffffff" : "#94a3b8",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            {/* Tabla Detallada de Cargos */}
-            <div style={{ flex: 1, overflow: "auto", padding: "0" }}>
-              <table className="custom-table" style={{ fontSize: "0.82rem", margin: 0 }}>
-                <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
-                  <tr>
-                    <th style={{ width: "35px", textAlign: "center" }}>#</th>
-                    <th style={{ textAlign: "left" }}>Cargo / Función Oficial</th>
-                    <th style={{ textAlign: "left" }}>Especialidad / Área</th>
-                    <th style={{ textAlign: "right", color: "#a5b4fc", width: "90px" }}>Planilla SEP</th>
-                    <th style={{ textAlign: "right", color: "#93c5fd", width: "100px" }}>Convocatoria</th>
-                    <th style={{ textAlign: "right", width: "85px" }}>Diferencia</th>
-                    <th style={{ textAlign: "center", width: "170px" }}>Diagnóstico</th>
-                    <th style={{ textAlign: "left", width: "160px" }}>Observación / Detalle</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cargosFiltradosModal.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>
-                        {cargosDeInstitucion.length === 0
-                          ? "No se hallaron cargos individuales desglosados para esta institución."
-                          : "No hay cargos que coincidan con los filtros aplicados."}
-                      </td>
-                    </tr>
-                  ) : (
-                    cargosFiltradosModal.map((c, i) => {
-                      const sepCant = c.cant_sep ?? 0;
-                      const convCant = c.items_convocatoria ?? 0;
-                      const dif = convCant - sepCant;
-                      const a3 = c.anios_3 ?? 0;
-                      const a2 = c.anios_2 ?? 0;
-                      const a1 = c.anios_1 ?? 0;
-                      const esInam = (c.detalle || "").toUpperCase().includes("INAMOBILIDAD");
+            {/* CUERPO DEL MODAL */}
+            <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "14px 20px" }}>
+              {tabModal === "JUNTOS" ? (
+                /* ── VISTA PARALELA LADO A LADO (JUNTOS) ── */
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", height: "100%", overflow: "hidden" }}>
+                  {/* PANEL IZQUIERDO: CONVOCATORIA OFICIAL */}
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      background: "rgba(15, 23, 42, 0.5)",
+                      borderRadius: "10px",
+                      border: "1px solid rgba(59, 130, 246, 0.35)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Header Panel Convocatoria */}
+                    <div
+                      style={{
+                        padding: "10px 16px",
+                        background: "rgba(59, 130, 246, 0.15)",
+                        borderBottom: "1px solid rgba(59, 130, 246, 0.3)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Target size={16} color="var(--accent-blue)" />
+                        <span style={{ fontWeight: 700, color: "#93c5fd", fontSize: "0.85rem" }}>
+                          Cargos Convocatoria Oficial ({cargosConvocadosOrdenados.length})
+                        </span>
+                      </div>
+                      <span style={{ fontSize: "0.76rem", color: "#60a5fa", fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>
+                        {modalEsfm.convocadosTotal} plazas totales
+                      </span>
+                    </div>
 
-                      return (
-                        <tr key={i}>
-                          <td style={{ textAlign: "center", color: "#64748b", fontSize: "0.75rem" }}>{i + 1}</td>
-                          <td style={{ fontWeight: 600, color: "#f1f5f9" }}>
-                            {c.cargo_oficial_homologado || c.cargo_display || c.cargo_key}
-                          </td>
-                          <td style={{ color: "#cbd5e1" }}>
-                            {c.descripcion_cargo || "—"}
-                          </td>
-                          <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: sepCant > 0 ? "#a5b4fc" : "#64748b" }}>
-                            {sepCant > 0 ? sepCant : "—"}
-                          </td>
-                          <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: convCant > 0 ? "#93c5fd" : "#64748b" }}>
-                            {convCant > 0 ? (
-                              <span>
-                                {convCant}
-                                {(a3 > 0 || a2 > 0 || a1 > 0) && (
-                                  <span style={{ fontSize: "0.68em", color: "#64748b", display: "block", fontWeight: 400 }}>
-                                    {[a3 > 0 && `${a3} (3a)`, a2 > 0 && `${a2} (2a)`, a1 > 0 && `${a1} (1a)`].filter(Boolean).join(" ")}
-                                  </span>
-                                )}
-                              </span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td style={{
-                            textAlign: "right",
-                            fontFamily: "var(--font-mono, monospace)",
-                            fontWeight: 700,
-                            color: dif > 0 ? "var(--accent-rose)" : dif < 0 ? "var(--accent-amber)" : "var(--accent-emerald)",
-                          }}>
-                            {dif > 0 ? `+${dif}` : dif === 0 ? "0" : dif}
-                          </td>
-                          <td style={{ textAlign: "center" }}>
-                            <span
-                              style={{
-                                display: "inline-block",
-                                padding: "2px 7px",
-                                borderRadius: "4px",
-                                fontSize: "0.72rem",
-                                fontWeight: 600,
-                                background: dif > 0
-                                  ? "rgba(244, 63, 94, 0.15)"
-                                  : dif < 0
-                                    ? "rgba(245, 158, 11, 0.15)"
-                                    : "rgba(16, 185, 129, 0.15)",
-                                color: dif > 0
-                                  ? "#fda4af"
-                                  : dif < 0
-                                    ? "#fde68a"
-                                    : "#6ee7b7",
-                                border: "1px solid",
-                                borderColor: dif > 0
-                                  ? "rgba(244, 63, 94, 0.3)"
-                                  : dif < 0
-                                    ? "rgba(245, 158, 11, 0.3)"
-                                    : "rgba(16, 185, 129, 0.3)",
-                              }}
+                    {/* Tabla Convocatoria Ordenable */}
+                    <div style={{ flex: 1, overflow: "auto" }}>
+                      <table className="custom-table" style={{ fontSize: "0.78rem", margin: 0 }}>
+                        <thead style={{ position: "sticky", top: 0, zIndex: 5, background: "#111827" }}>
+                          <tr>
+                            <th style={{ width: "32px", textAlign: "center", padding: "8px 6px" }}>#</th>
+                            <th
+                              onClick={() => handleSortConv("cargo")}
+                              style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                              title="Clic para ordenar por Cargo"
                             >
-                              {c.diagnostico || (dif === 0 ? "Ratificado" : dif > 0 ? "Nuevo en Convocatoria" : "Cubierto sin Convocatoria")}
-                            </span>
-                          </td>
-                          <td style={{ fontSize: "0.74rem", color: esInam ? "#f59e0b" : "#94a3b8" }}>
-                            {c.detalle ? (
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                {esInam && <Info size={12} color="#f59e0b" />}
-                                {c.detalle}
-                              </span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>Cargo Convocado</span>
+                                {sortConvField === "cargo" ? (
+                                  sortConvOrder === "asc" ? <ArrowUp size={12} color="var(--accent-blue)" /> : <ArrowDown size={12} color="var(--accent-blue)" />
+                                ) : (
+                                  <ArrowUpDown size={11} color="#64748b" />
+                                )}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => handleSortConv("descripcion")}
+                              style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                              title="Clic para ordenar por Especialidad"
+                            >
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>Especialidad / Área</span>
+                                {sortConvField === "descripcion" ? (
+                                  sortConvOrder === "asc" ? <ArrowUp size={12} color="var(--accent-blue)" /> : <ArrowDown size={12} color="var(--accent-blue)" />
+                                ) : (
+                                  <ArrowUpDown size={11} color="#64748b" />
+                                )}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => handleSortConv("total")}
+                              style={{ textAlign: "right", width: "70px", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                              title="Clic para ordenar por Plazas"
+                            >
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "flex-end" }}>
+                                <span>Plazas</span>
+                                {sortConvField === "total" ? (
+                                  sortConvOrder === "asc" ? <ArrowUp size={12} color="var(--accent-blue)" /> : <ArrowDown size={12} color="var(--accent-blue)" />
+                                ) : (
+                                  <ArrowUpDown size={11} color="#64748b" />
+                                )}
+                              </div>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cargosConvocadosOrdenados.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                                No se encontraron cargos convocados.
+                              </td>
+                            </tr>
+                          ) : (
+                            cargosConvocadosOrdenados.map((r, i) => {
+                              const a3 = r.anios_3 || 0;
+                              const a2 = r.anios_2 || 0;
+                              const a1 = r.anios_1 || 0;
+                              const tot = (a3 + a2 + a1) || 1;
+                              const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD");
+
+                              return (
+                                <tr key={i}>
+                                  <td style={{ textAlign: "center", color: "#64748b", padding: "7px 6px" }}>{i + 1}</td>
+                                  <td style={{ fontWeight: 600, color: "#f1f5f9", padding: "7px 10px" }}>
+                                    {r.cargo_raw}
+                                    {esInam && (
+                                      <span style={{ marginLeft: "5px", fontSize: "0.68em", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.4)", borderRadius: "3px", padding: "1px 4px" }}>
+                                        Inamovible
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.descripcion || "—"}</td>
+                                  <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#93c5fd", padding: "7px 10px" }}>
+                                    {tot}
+                                    {(a3 > 0 || a2 > 0 || a1 > 0) && (
+                                      <span style={{ fontSize: "0.72em", color: "#64748b", display: "block", fontWeight: 400 }}>
+                                        {[a3 > 0 && `${a3}a3`, a2 > 0 && `${a2}a2`, a1 > 0 && `${a1}a1`].filter(Boolean).join(" ")}
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* PANEL DERECHO: PLANILLA SEP */}
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      background: "rgba(15, 23, 42, 0.5)",
+                      borderRadius: "10px",
+                      border: "1px solid rgba(129, 140, 248, 0.35)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Header Panel Planilla SEP */}
+                    <div
+                      style={{
+                        padding: "8px 16px",
+                        background: "rgba(129, 140, 248, 0.15)",
+                        borderBottom: "1px solid rgba(129, 140, 248, 0.3)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Layers size={16} color="#818cf8" />
+                        <span style={{ fontWeight: 700, color: "#c7d2fe", fontSize: "0.85rem" }}>
+                          Ítems Planilla SEP ({cargosSep.length})
+                        </span>
+                      </div>
+
+                      {/* Selector Agrupado vs Detalle */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <button
+                          onClick={() => setModoSep("AGRUPADO")}
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            border: "1px solid",
+                            background: modoSep === "AGRUPADO" ? "#6366f1" : "transparent",
+                            borderColor: modoSep === "AGRUPADO" ? "#818cf8" : "rgba(255,255,255,0.1)",
+                            color: modoSep === "AGRUPADO" ? "#ffffff" : "#94a3b8",
+                          }}
+                        >
+                          Agrupado ({cargosSepAgrupados.length})
+                        </button>
+                        <button
+                          onClick={() => setModoSep("DETALLE")}
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            border: "1px solid",
+                            background: modoSep === "DETALLE" ? "#6366f1" : "transparent",
+                            borderColor: modoSep === "DETALLE" ? "#818cf8" : "rgba(255,255,255,0.1)",
+                            color: modoSep === "DETALLE" ? "#ffffff" : "#94a3b8",
+                          }}
+                        >
+                          Ítem x Ítem ({cargosSep.length})
+                        </button>
+                        <span style={{ fontSize: "0.76rem", color: "#a5b4fc", fontWeight: 700, fontFamily: "var(--font-mono, monospace)", marginLeft: "4px" }}>
+                          {modalEsfm.topeSEP} ítems
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tabla Planilla SEP Ordenable */}
+                    <div style={{ flex: 1, overflow: "auto" }}>
+                      <table className="custom-table" style={{ fontSize: "0.78rem", margin: 0 }}>
+                        <thead style={{ position: "sticky", top: 0, zIndex: 5, background: "#111827" }}>
+                          <tr>
+                            <th style={{ width: "32px", textAlign: "center", padding: "8px 6px" }}>#</th>
+                            <th
+                              onClick={() => handleSortSep("cargo")}
+                              style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                              title="Clic para ordenar por Cargo"
+                            >
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>Cargo en Planilla SEP</span>
+                                {sortSepField === "cargo" ? (
+                                  sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
+                                ) : (
+                                  <ArrowUpDown size={11} color="#64748b" />
+                                )}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => handleSortSep("descripcion")}
+                              style={{ textAlign: "left", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                              title="Clic para ordenar por Descripción"
+                            >
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span>Descripción / Detalle</span>
+                                {sortSepField === "descripcion" ? (
+                                  sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
+                                ) : (
+                                  <ArrowUpDown size={11} color="#64748b" />
+                                )}
+                              </div>
+                            </th>
+                            <th
+                              onClick={() => handleSortSep("cantidad")}
+                              style={{ textAlign: "right", width: "70px", cursor: "pointer", userSelect: "none", padding: "8px 10px" }}
+                              title="Clic para ordenar por Cantidad de Ítems"
+                            >
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "flex-end" }}>
+                                <span>Ítems</span>
+                                {sortSepField === "cantidad" ? (
+                                  sortSepOrder === "asc" ? <ArrowUp size={12} color="#818cf8" /> : <ArrowDown size={12} color="#818cf8" />
+                                ) : (
+                                  <ArrowUpDown size={11} color="#64748b" />
+                                )}
+                              </div>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cargosSepOrdenados.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} style={{ textAlign: "center", padding: "30px", color: "var(--text-muted)" }}>
+                                No se encontraron ítems en planilla SEP.
+                              </td>
+                            </tr>
+                          ) : (
+                            cargosSepOrdenados.map((r, i) => (
+                              <tr key={i}>
+                                <td style={{ textAlign: "center", color: "#64748b", padding: "7px 6px" }}>{i + 1}</td>
+                                <td style={{ fontWeight: 600, color: "#f1f5f9", padding: "7px 10px" }}>{r.cargo}</td>
+                                <td style={{ color: "#cbd5e1", padding: "7px 10px" }}>{r.descripcion || "—"}</td>
+                                <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#a5b4fc", padding: "7px 10px" }}>
+                                  {r.cantidad}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : tabModal === "CONVOCATORIA" ? (
+                /* ── VISTA COMPLETA SOLO CONVOCATORIA ── */
+                <div style={{ flex: 1, overflow: "auto", border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: "8px" }}>
+                  <table className="custom-table" style={{ fontSize: "0.82rem", margin: 0 }}>
+                    <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
+                      <tr>
+                        <th style={{ width: "38px", textAlign: "center", padding: "10px 8px" }}>#</th>
+                        <th onClick={() => handleSortConv("cargo")} style={{ cursor: "pointer", userSelect: "none" }}>
+                          Cargo Convocado {sortConvField === "cargo" && (sortConvOrder === "asc" ? "▲" : "▼")}
+                        </th>
+                        <th onClick={() => handleSortConv("descripcion")} style={{ cursor: "pointer", userSelect: "none" }}>
+                          Especialidad / Área {sortConvField === "descripcion" && (sortConvOrder === "asc" ? "▲" : "▼")}
+                        </th>
+                        <th onClick={() => handleSortConv("a3")} style={{ textAlign: "right", width: "85px", cursor: "pointer", userSelect: "none" }}>
+                          3 Años
+                        </th>
+                        <th onClick={() => handleSortConv("a2")} style={{ textAlign: "right", width: "85px", cursor: "pointer", userSelect: "none" }}>
+                          2 Años
+                        </th>
+                        <th onClick={() => handleSortConv("a1")} style={{ textAlign: "right", width: "95px", cursor: "pointer", userSelect: "none" }}>
+                          1 Año (Comp.)
+                        </th>
+                        <th onClick={() => handleSortConv("total")} style={{ textAlign: "right", width: "95px", cursor: "pointer", userSelect: "none" }}>
+                          Total Plazas
+                        </th>
+                        <th style={{ textAlign: "left", width: "160px" }}>Inamovilidad / Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cargosConvocadosOrdenados.map((r, i) => {
+                        const a3 = r.anios_3 || 0;
+                        const a2 = r.anios_2 || 0;
+                        const a1 = r.anios_1 || 0;
+                        const tot = a3 + a2 + a1 || 1;
+                        const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD");
+
+                        return (
+                          <tr key={i}>
+                            <td style={{ textAlign: "center", color: "#64748b" }}>{i + 1}</td>
+                            <td style={{ fontWeight: 600, color: "#f1f5f9" }}>{r.cargo_raw}</td>
+                            <td style={{ color: "#cbd5e1" }}>{r.descripcion || "—"}</td>
+                            <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a3 > 0 ? "#93c5fd" : "#64748b" }}>{a3 > 0 ? a3 : "—"}</td>
+                            <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a2 > 0 ? "#fde68a" : "#64748b" }}>{a2 > 0 ? a2 : "—"}</td>
+                            <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", color: a1 > 0 ? "#c4b5fd" : "#64748b" }}>{a1 > 0 ? a1 : "—"}</td>
+                            <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#ffffff" }}>{tot}</td>
+                            <td style={{ fontSize: "0.75rem", color: esInam ? "#f59e0b" : "#94a3b8" }}>{r.detalle || "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                /* ── VISTA COMPLETA SOLO PLANILLA SEP ── */
+                <div style={{ flex: 1, overflow: "auto", border: "1px solid rgba(129, 140, 248, 0.3)", borderRadius: "8px" }}>
+                  <table className="custom-table" style={{ fontSize: "0.82rem", margin: 0 }}>
+                    <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "#111827" }}>
+                      <tr>
+                        <th style={{ width: "38px", textAlign: "center", padding: "10px 8px" }}>#</th>
+                        <th onClick={() => handleSortSep("cargo")} style={{ cursor: "pointer", userSelect: "none" }}>
+                          Cargo en Planilla SEP {sortSepField === "cargo" && (sortSepOrder === "asc" ? "▲" : "▼")}
+                        </th>
+                        <th onClick={() => handleSortSep("descripcion")} style={{ cursor: "pointer", userSelect: "none" }}>
+                          Descripción {sortSepField === "descripcion" && (sortSepOrder === "asc" ? "▲" : "▼")}
+                        </th>
+                        <th onClick={() => handleSortSep("cantidad")} style={{ textAlign: "right", width: "110px", cursor: "pointer", userSelect: "none" }}>
+                          Ítems {sortSepField === "cantidad" && (sortSepOrder === "asc" ? "▲" : "▼")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cargosSepOrdenados.map((r, i) => (
+                        <tr key={i}>
+                          <td style={{ textAlign: "center", color: "#64748b" }}>{i + 1}</td>
+                          <td style={{ fontWeight: 600, color: "#f1f5f9" }}>{r.cargo}</td>
+                          <td style={{ color: "#cbd5e1" }}>{r.descripcion || "—"}</td>
+                          <td style={{ textAlign: "right", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#a5b4fc" }}>{r.cantidad}</td>
                         </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Footer del Modal */}
@@ -1023,19 +1331,27 @@ export const ControlTopesTab: React.FC<Props> = ({
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                padding: "12px 24px",
+                padding: "12px 22px",
                 background: "rgba(17, 24, 39, 0.95)",
                 borderTop: "1px solid var(--border-subtle)",
               }}
             >
-              <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-                Mostrando <strong>{cargosFiltradosModal.length}</strong> de <strong>{cargosDeInstitucion.length}</strong> cargos registrados
-              </span>
+              <div style={{ display: "flex", gap: "18px", fontSize: "0.8rem", color: "#94a3b8" }}>
+                <span>
+                  Convocatoria Oficial: <strong style={{ color: "#93c5fd" }}>{modalEsfm.convocadosTotal} plazas</strong> ({cargosConvocados.length} cargos)
+                </span>
+                <span>
+                  Planilla SEP: <strong style={{ color: "#a5b4fc" }}>{modalEsfm.topeSEP} ítems</strong> ({cargosSepAgrupados.length} denominaciones)
+                </span>
+                <span style={{ color: modalEsfm.diferencia > 0 ? "var(--accent-rose)" : modalEsfm.diferencia < 0 ? "var(--accent-amber)" : "var(--accent-emerald)", fontWeight: 700 }}>
+                  Diferencia: {modalEsfm.diferencia > 0 ? `+${modalEsfm.diferencia}` : modalEsfm.diferencia}
+                </span>
+              </div>
 
               <button
                 onClick={() => setModalEsfm(null)}
                 className="btn-secondary"
-                style={{ padding: "6px 16px", fontSize: "0.8rem", fontWeight: 600 }}
+                style={{ padding: "6px 18px", fontSize: "0.82rem", fontWeight: 600 }}
               >
                 Cerrar (ESC)
               </button>

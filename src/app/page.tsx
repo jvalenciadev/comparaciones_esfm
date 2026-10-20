@@ -470,7 +470,8 @@ export default function Home() {
           {activeTab === "topes" && (
             <ControlTopesTab
               controlTopes={controlTopes}
-              tabla={tabla}
+              convocatoriaRecords={dfs.publicacion_convocatoria || []}
+              planillaSepRecords={dfs.planilla_sep || []}
               filtroDepto={filtroDepto}
               filtroEsfm={filtroEsfm}
               categoriaPersonal={configConvocatoria.categoriaPersonal}
