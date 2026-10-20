@@ -28,7 +28,7 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
   filtroEsfm,
 }) => {
   const [tipoFiltro, setTipoFiltro] = useState<
-    "TODOS" | "INAMOBILIDAD" | "INCREMENTO" | "QUITA_PCD" | "COMPULSA"
+    "TODOS" | "INAMOVILIDAD" | "INCREMENTO" | "QUITA_PCD" | "COMPULSA"
   >("TODOS");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -45,12 +45,12 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
   const filasClasificadas = useMemo(() => {
     return filasCasosEspeciales.map((r) => {
       const detUpper = (r.detalle || "").toUpperCase();
-      let tipo: "INAMOBILIDAD" | "INCREMENTO" | "QUITA_PCD" | "COMPULSA" = "COMPULSA";
+      let tipo: "INAMOVILIDAD" | "INCREMENTO" | "QUITA_PCD" | "COMPULSA" = "COMPULSA";
       let clasificacion = "📝 Compulsa (1 Año)";
       let badgeClass = "badge-blue";
 
-      if (detUpper.includes("INAMOBILIDAD")) {
-        tipo = "INAMOBILIDAD";
+      if (detUpper.includes("INAMOVILIDAD")) {
+        tipo = "INAMOVILIDAD";
         clasificacion = "🛡️ Inamovilidad Funcionaria";
         badgeClass = "badge-yellow";
       } else if (detUpper.includes("INCREMENT")) {
@@ -86,12 +86,12 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
   }, [filasCasosEspeciales]);
 
   // Contadores para KPIs
-  const totalInamovilidad = filasClasificadas.filter((f) => f.tipo === "INAMOBILIDAD").length;
+  const totalInamovilidad = filasClasificadas.filter((f) => f.tipo === "INAMOVILIDAD").length;
   const totalIncremento = filasClasificadas.filter((f) => f.tipo === "INCREMENTO").length;
   const totalQuita = filasClasificadas.filter((f) => f.tipo === "QUITA_PCD").length;
 
   // Desglose inamovilidad: docente vs administrativo
-  const filasInam = filasClasificadas.filter((f) => f.tipo === "INAMOBILIDAD");
+  const filasInam = filasClasificadas.filter((f) => f.tipo === "INAMOVILIDAD");
   const inamDocente = filasInam.filter(
     (f) => f.cargo.includes("CATEDRATICO") || f.cargo.includes("DOCENTE")
   );
@@ -164,9 +164,9 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
       {/* KPI Cards Superiores */}
       <div className="metrics-grid">
         <div
-          onClick={() => setTipoFiltro(tipoFiltro === "INAMOBILIDAD" ? "TODOS" : "INAMOBILIDAD")}
+          onClick={() => setTipoFiltro(tipoFiltro === "INAMOVILIDAD" ? "TODOS" : "INAMOVILIDAD")}
           className="metric-card"
-          style={{ cursor: "pointer", borderColor: tipoFiltro === "INAMOBILIDAD" ? "var(--accent-amber)" : "var(--border-subtle)" }}
+          style={{ cursor: "pointer", borderColor: tipoFiltro === "INAMOVILIDAD" ? "var(--accent-amber)" : "var(--border-subtle)" }}
         >
           <div className="title">
             <ShieldAlert size={16} color="#f59e0b" />
@@ -184,7 +184,7 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             </span>
           </div>
           <div style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "6px" }}>
-            <span>{itemsInamovilidad} ítems en filas con INAMOBILIDAD</span>
+            <span>{itemsInamovilidad} ítems en filas con INAMOVILIDAD</span>
             <br />
             Sin Inamovilidad: <strong style={{ color: "#a7f3d0" }}>{itemsSinInamovilidad}</strong> ítems (−1 por fila)
           </div>
@@ -253,13 +253,13 @@ export const InamovilidadesModificacionesTab: React.FC<Props> = ({
             Todos ({filasClasificadas.length})
           </button>
           <button
-            onClick={() => setTipoFiltro("INAMOBILIDAD")}
+            onClick={() => setTipoFiltro("INAMOVILIDAD")}
             className="btn-secondary"
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: "6px",
-              ...(tipoFiltro === "INAMOBILIDAD" ? { borderColor: "var(--accent-amber)", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" } : {})
+              ...(tipoFiltro === "INAMOVILIDAD" ? { borderColor: "var(--accent-amber)", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" } : {})
             }}
           >
             <ShieldAlert size={14} color="#f59e0b" />

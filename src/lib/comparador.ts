@@ -77,7 +77,7 @@ export function calcularItemsFila(
   }
 
   const detalle = (row.detalle || "").trim().toUpperCase();
-  const esInamovilidad = detalle.includes("INAMOBILIDAD");
+  const esInamovilidad = detalle.includes("INAMOVILIDAD");
 
   // Base de ítems según columnas seleccionadas
   let total = 0;
@@ -418,7 +418,7 @@ export function resumenPorEsfm(
     const a2 = r.anios_2 ?? 0;
     const a1 = r.anios_1 ?? 0;
     const itemsCalc = calcularItemsFila(r, config);
-    const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") ? 1 : 0;
+    const esInam = (r.detalle || "").toUpperCase().includes("INAMOVILIDAD") ? 1 : 0;
 
     if (!existing) {
       map.set(key, {
@@ -511,7 +511,7 @@ export function calcularControlTopes(
     const a3 = r.anios_3 ?? 0;
     const a2 = r.anios_2 ?? 0;
     const a1 = r.anios_1 ?? 0;
-    const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD") ? 1 : 0;
+    const esInam = (r.detalle || "").toUpperCase().includes("INAMOVILIDAD") ? 1 : 0;
 
 
     if (!item) {

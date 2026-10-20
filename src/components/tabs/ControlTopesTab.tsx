@@ -1474,7 +1474,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                               const a2 = r.anios_2 || 0;
                               const a1 = r.anios_1 || 0;
                               const tot = (a3 + a2 + a1) || 1;
-                              const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD");
+                              const esInam = (r.detalle || "").toUpperCase().includes("INAMOVILIDAD");
                               const marca = marcasConv[r._key];
                               const isTick = !!marca?.tick;
                               const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
@@ -1548,7 +1548,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                                     )}
                                     {esInam && (
                                       <span style={{ marginLeft: "5px", fontSize: "0.68em", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.4)", borderRadius: "3px", padding: "1px 4px" }}>
-                                        Inamobilidad
+                                        INAMOVILIDAD
                                       </span>
                                     )}
                                   </td>
@@ -1887,7 +1887,7 @@ export const ControlTopesTab: React.FC<Props> = ({
                           const a2 = r.anios_2 || 0;
                           const a1 = r.anios_1 || 0;
                           const tot = a3 + a2 + a1 || 1;
-                          const esInam = (r.detalle || "").toUpperCase().includes("INAMOBILIDAD");
+                          const esInam = (r.detalle || "").toUpperCase().includes("INAMOVILIDAD");
                           const marca = marcasConv[r._key];
                           const isTick = !!marca?.tick;
                           const colorObj = isTick ? (PALETA_COLORES.find((c) => c.id === marca.colorId) || PALETA_COLORES[0]) : null;
